@@ -1,0 +1,38 @@
+-- 📜 LocalScript – đặt trong StarterPlayerScripts hoặc StarterGui
+
+local player = game.Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- 🪄 Hàm nhân bản toàn bộ item trong backpack và trên nhân vật
+local function duplicateItems()
+	-- Nhân bản trong Backpack
+	for _, item in pairs(backpack:GetChildren()) do
+		local clone = item:Clone()
+		clone.Parent = backpack
+	end
+
+	-- Nhân bản trong Character (nếu có tool đang cầm)
+	for _, item in pairs(character:GetChildren()) do
+		if item:IsA("Tool") then
+			local clone = item:Clone()
+			clone.Parent = backpack
+		end
+	end
+
+	-- Thông báo ra màn hình
+	game.StarterGui:SetCore("SendNotification", {
+		Title = "✅ Nhân bản thành công";
+		Text = "Tất cả item đã được nhân bản trong Backpack!";
+		Duration = 3;
+	})
+end
+
+-- 🔘 Gán phím tắt (ví dụ phím "B" để nhân bản)
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == Enum.KeyCode.B then
+		duplicateItems()
+	end
+end)
