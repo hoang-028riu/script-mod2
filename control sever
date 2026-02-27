@@ -1,0 +1,267 @@
+-- Khởi tạo các Service cần thiết
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Xóa GUI cũ nếu đã tồn tại để tránh trùng lặp khi chạy lại script
+if CoreGui:FindFirstChild("ServerHopMenu") then
+    CoreGui.ServerHopMenu:Destroy()
+end
+
+-- Tạo ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ServerHopMenu"
+ScreenGui.Parent = CoreGui
+
+-- Khung chính (Main Frame)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 260)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -130)
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+MainFrame.Active = true
+MainFrame.Draggable = true -- Cho phép kéo thả menu
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Tiêu đề
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBold
+Title.Text = "Menu Hẹn Giờ Server Hop"
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = Title
+
+-- Sửa góc dưới của Title để khớp với MainFrame
+local TitleBottomFix = Instance.new("Frame")
+TitleBottomFix.Size = UDim2.new(1, 0, 0, 8)
+TitleBottomFix.Position = UDim2.new(0, 0, 1, -8)
+TitleBottomFix.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+TitleBottomFix.BorderSizePixel = 0
+TitleBottomFix.Parent = Title
+
+-- Ô nhập thời gian
+local TimeInput = Instance.new("TextBox")
+TimeInput.Size = UDim2.new(0, 135, 0, 30)
+TimeInput.Position = UDim2.new(0, 10, 0, 50)
+TimeInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+TimeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeInput.PlaceholderText = "Nhập số..."
+TimeInput.Font = Enum.Font.Gotham
+TimeInput.TextSize = 14
+TimeInput.Text = ""
+TimeInput.Parent = MainFrame
+
+local InputCorner = Instance.new("UICorner")
+InputCorner.CornerRadius = UDim.new(0, 4)
+InputCorner.Parent = TimeInput
+
+-- Nút chuyển đổi Giây/Phút
+local isMinutes = false
+local ToggleUnitBtn = Instance.new("TextButton")
+ToggleUnitBtn.Size = UDim2.new(0, 135, 0, 30)
+ToggleUnitBtn.Position = UDim2.new(0, 155, 0, 50)
+ToggleUnitBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleUnitBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
+ToggleUnitBtn.Font = Enum.Font.Gotham
+ToggleUnitBtn.TextSize = 14
+ToggleUnitBtn.Text = "Đơn vị: Giây"
+ToggleUnitBtn.Parent = MainFrame
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 4)
+ToggleCorner.Parent = ToggleUnitBtn
+
+ToggleUnitBtn.MouseButton1Click:Connect(function()
+    isMinutes = not isMinutes
+    if isMinutes then
+        ToggleUnitBtn.Text = "Đơn vị: Phút"
+    else
+        ToggleUnitBtn.Text = "Đơn vị: Giây"
+    end
+end)
+
+-- Nhãn hiển thị trạng thái
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 20)
+StatusLabel.Position = UDim2.new(0, 10, 0, 90)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 13
+StatusLabel.Text = "Trạng thái: Đang chờ lệnh"
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = MainFrame
+
+-- Logic Server Hop
+local function PerformServerHop()
+    StatusLabel.Text = "Đang tìm server để Hop..."
+    local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if httprequest then
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+        local response = httprequest({
+            Url = url,
+            Method = "GET"
+        })
+        
+        if response.Body then
+            local data = HttpService:JSONDecode(response.Body)
+            local servers = {}
+            if data and data.data then
+                for _, v in pairs(data.data) do
+                    if type(v) == "table" and v.maxPlayers > v.playing and v.id ~= game.JobId then
+                        table.insert(servers, v.id)
+                    end
+                end
+            end
+            
+            if #servers > 0 then
+                local randomServer = servers[math.random(1, #servers)]
+                StatusLabel.Text = "Đang kết nối sang server khác..."
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, LocalPlayer)
+            else
+                StatusLabel.Text = "Không tìm thấy server phù hợp!"
+            end
+        else
+            StatusLabel.Text = "Lỗi khi lấy danh sách server!"
+        end
+    else
+        StatusLabel.Text = "Exploit của bạn không hỗ trợ http request!"
+    end
+end
+
+-- Logic Rejoin
+local function PerformRejoin()
+    StatusLabel.Text = "Đang Rejoin lại server hiện tại..."
+    if #Players:GetPlayers() <= 1 then
+        LocalPlayer:Kick("\nRejoining...")
+        task.wait()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    else
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+end
+
+-- Nút Hẹn giờ Server Hop
+local TimerRunning = false
+local StartTimerBtn = Instance.new("TextButton")
+StartTimerBtn.Size = UDim2.new(1, -20, 0, 35)
+StartTimerBtn.Position = UDim2.new(0, 10, 0, 120)
+StartTimerBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+StartTimerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartTimerBtn.Font = Enum.Font.GothamBold
+StartTimerBtn.TextSize = 14
+StartTimerBtn.Text = "Bắt Đầu Hẹn Giờ Server Hop"
+StartTimerBtn.Parent = MainFrame
+
+local TimerBtnCorner = Instance.new("UICorner")
+TimerBtnCorner.CornerRadius = UDim.new(0, 4)
+TimerBtnCorner.Parent = StartTimerBtn
+
+StartTimerBtn.MouseButton1Click:Connect(function()
+    if TimerRunning then
+        TimerRunning = false
+        StartTimerBtn.Text = "Bắt Đầu Hẹn Giờ Server Hop"
+        StartTimerBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+        StatusLabel.Text = "Đã hủy đếm ngược."
+        return
+    end
+
+    local timeValue = tonumber(TimeInput.Text)
+    if not timeValue or timeValue <= 0 then
+        StatusLabel.Text = "Vui lòng nhập số hợp lệ!"
+        return
+    end
+
+    TimerRunning = true
+    StartTimerBtn.Text = "Hủy Hẹn Giờ"
+    StartTimerBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    
+    local totalSeconds = isMinutes and (timeValue * 60) or timeValue
+    
+    -- Vòng lặp đếm ngược
+    task.spawn(function()
+        for i = totalSeconds, 1, -1 do
+            if not TimerRunning then break end
+            StatusLabel.Text = "Sẽ Server Hop sau: " .. i .. " giây"
+            task.wait(1)
+        end
+        
+        if TimerRunning then
+            TimerRunning = false
+            StartTimerBtn.Text = "Bắt Đầu Hẹn Giờ Server Hop"
+            StartTimerBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+            PerformServerHop()
+        end
+    end)
+end)
+
+-- Nút Server Hop Ngay
+local HopNowBtn = Instance.new("TextButton")
+HopNowBtn.Size = UDim2.new(1, -20, 0, 35)
+HopNowBtn.Position = UDim2.new(0, 10, 0, 165)
+HopNowBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 60)
+HopNowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HopNowBtn.Font = Enum.Font.GothamBold
+HopNowBtn.TextSize = 14
+HopNowBtn.Text = "Server Hop Ngay Lập Tức"
+HopNowBtn.Parent = MainFrame
+
+local HopNowCorner = Instance.new("UICorner")
+HopNowCorner.CornerRadius = UDim.new(0, 4)
+HopNowCorner.Parent = HopNowBtn
+
+HopNowBtn.MouseButton1Click:Connect(function()
+    TimerRunning = false -- Tắt hẹn giờ nếu đang chạy
+    PerformServerHop()
+end)
+
+-- Nút Rejoin Ngay
+local RejoinBtn = Instance.new("TextButton")
+RejoinBtn.Size = UDim2.new(1, -20, 0, 35)
+RejoinBtn.Position = UDim2.new(0, 10, 0, 210)
+RejoinBtn.BackgroundColor3 = Color3.fromRGB(160, 100, 40)
+RejoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RejoinBtn.Font = Enum.Font.GothamBold
+RejoinBtn.TextSize = 14
+RejoinBtn.Text = "Rejoin Server Hiện Tại"
+RejoinBtn.Parent = MainFrame
+
+local RejoinCorner = Instance.new("UICorner")
+RejoinCorner.CornerRadius = UDim.new(0, 4)
+RejoinCorner.Parent = RejoinBtn
+
+RejoinBtn.MouseButton1Click:Connect(function()
+    TimerRunning = false -- Tắt hẹn giờ nếu đang chạy
+    PerformRejoin()
+end)
+
+-- Tạo nút Tắt (X) góc phải trên
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -30, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.Text = "X"
+CloseBtn.Parent = MainFrame
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+print("Đã tải xong Menu Server Hop!")
