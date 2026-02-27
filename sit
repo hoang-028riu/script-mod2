@@ -1,0 +1,39 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+local debounce = false
+
+UIS.InputBegan:Connect(function(key, gp)
+	if gp then return end
+	if key.KeyCode == Enum.KeyCode.E and not debounce then
+		debounce = true
+
+		-- TẠO GHẾ
+		local seat = Instance.new("Seat")
+		seat.Size = Vector3.new(4, 1, 4)
+		seat.Anchored = true
+		seat.TopSurface = Enum.SurfaceType.Smooth
+		seat.BottomSurface = Enum.SurfaceType.Smooth
+		seat.Name = "SpawnedSeat"
+
+		-- VỊ TRÍ GHẾ: ngay dưới mông
+		seat.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+		seat.Parent = workspace
+
+		-- GỘN LẠI / ỔN ĐỊNH
+		task.wait(0.1)
+		hrp.CFrame = seat.CFrame + Vector3.new(0, 2.5, 0)
+
+		-- CHO NHÂN VẬT NGỒI
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.Sit = true
+		end
+
+		task.wait(0.4)
+		debounce = false
+	end
+end)
