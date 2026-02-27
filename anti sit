@@ -1,0 +1,108 @@
+-- Lấy dịch vụ Players
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Biến lưu trạng thái bật/tắt
+local isAntiSitEnabled = false
+
+-- ==========================================
+-- 1. TẠO GIAO DIỆN NGƯỜI DÙNG (GUI)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AntiSitGui"
+-- Giữ GUI không bị mất khi nhân vật hồi sinh (reset)
+ScreenGui.ResetOnSpawn = false 
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 200, 0, 100)
+MainFrame.Position = UDim2.new(0.5, -100, 0.8, -50)
+MainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Cho phép kéo thả GUI trên màn hình
+MainFrame.Parent = ScreenGui
+
+local UICorner_Main = Instance.new("UICorner")
+UICorner_Main.CornerRadius = UDim.new(0, 10)
+UICorner_Main.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, 0, 0, 30)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Bảng Điều Khiển"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 16
+TitleLabel.Parent = MainFrame
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 160, 0, 40)
+ToggleButton.Position = UDim2.new(0.5, -80, 0.5, 5)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85) -- Màu đỏ (Tắt)
+ToggleButton.Text = "Chống Ngồi: TẮT"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Font = Enum.Font.GothamSemibold
+ToggleButton.TextSize = 14
+ToggleButton.Parent = MainFrame
+
+local UICorner_Btn = Instance.new("UICorner")
+UICorner_Btn.CornerRadius = UDim.new(0, 8)
+UICorner_Btn.Parent = ToggleButton
+
+-- ==========================================
+-- 2. HÀM XỬ LÝ CHỐNG NGỒI
+-- ==========================================
+local function updateAntiSitState(character)
+    if not character then return end
+    
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        if isAntiSitEnabled then
+            -- Tắt trạng thái Seated (Ngồi) của Humanoid
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+            
+            -- Nếu đang ngồi trước khi bật, ép nhân vật đứng dậy
+            if humanoid.Sit then
+                humanoid.Sit = false
+                humanoid.Jump = true
+            end
+        else
+            -- Bật lại trạng thái Seated để có thể ngồi bình thường
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+        end
+    end
+end
+
+-- ==========================================
+-- 3. XỬ LÝ SỰ KIỆN NÚT BẤM & HỒI SINH
+-- ==========================================
+ToggleButton.MouseButton1Click:Connect(function()
+    isAntiSitEnabled = not isAntiSitEnabled -- Đảo ngược trạng thái
+    
+    if isAntiSitEnabled then
+        ToggleButton.Text = "Chống Ngồi: BẬT"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(85, 255, 85) -- Màu xanh lá
+    else
+        ToggleButton.Text = "Chống Ngồi: TẮT"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85) -- Màu đỏ
+    end
+    
+    -- Cập nhật trạng thái cho nhân vật hiện tại
+    updateAntiSitState(LocalPlayer.Character)
+end)
+
+-- Khi nhân vật hồi sinh hoặc thay đổi, áp dụng lại trạng thái cài đặt
+LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+    -- Đợi một chút để Humanoid load đầy đủ
+    task.wait(0.5) 
+    updateAntiSitState(newCharacter)
+end)
+
+-- Khởi chạy lần đầu cho nhân vật nếu đã spawn
+if LocalPlayer.Character then
+    updateAntiSitState(LocalPlayer.Character)
+end
