@@ -1,0 +1,249 @@
+-- HITBOX EXPANDER + FREEZE OTHER PLAYERS (RELATIVE TO YOU) - Roblox LocalScript 2025
+-- Tính năng: Hitbox đầu kẻ địch to cực (dễ headshot), người chơi khác ĐỨNG YÊN HOÀN TOÀN so với bạn (bạn di chuyển họ vẫn yên)
+-- Key mặc định: E (đổi được trong TextBox) | GUI kéo thả | On/Off toggle
+-- Hoạt động 100% trên JJSploit, Delta, Solara, Codex...
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+local Player = Players.LocalPlayer
+getgenv().Enabled = false
+getgenv().HitboxSize = 12  -- Kích thước hitbox (có thể đổi trong console: getgenv().HitboxSize = 20)
+getgenv().ToggleKey = Enum.KeyCode.E
+
+-- Relative positions cho freeze
+local RelativePositions = {}
+local BaseMyCFrame = nil
+local HitboxConnection = nil
+local FreezeConnection = nil
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "HitboxFreezeGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 2147483647
+ScreenGui.Parent = CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 260, 0, 140)
+MainFrame.Position = UDim2.new(0.5, -130, 0.5, -70)
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(0, 170, 255)
+Stroke.Thickness = 2.5
+Stroke.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundTransparency = 1
+Title.Text = "Hitbox + Freeze Players"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+local KeyLabel = Instance.new("TextLabel")
+KeyLabel.Size = UDim2.new(0.35, 0, 0, 30)
+KeyLabel.Position = UDim2.new(0.05, 0, 0.3, 0)
+KeyLabel.BackgroundTransparency = 1
+KeyLabel.Text = "Key:"
+KeyLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+KeyLabel.TextScaled = true
+KeyLabel.Font = Enum.Font.GothamBold
+KeyLabel.Parent = MainFrame
+
+local KeyBox = Instance.new("TextBox")
+KeyBox.Size = UDim2.new(0.55, 0, 0, 30)
+KeyBox.Position = UDim2.new(0.4, 0, 0.3, 0)
+KeyBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+KeyBox.Text = "E"
+KeyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyBox.TextScaled = true
+KeyBox.Font = Enum.Font.Gotham
+KeyBox.Parent = MainFrame
+local KeyCorner = Instance.new("UICorner")
+KeyCorner.CornerRadius = UDim.new(0, 6)
+KeyCorner.Parent = KeyBox
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0.85, 0, 0, 40)
+ToggleBtn.Position = UDim2.new(0.075, 0, 0.6, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+ToggleBtn.Text = "ON/OFF (E)"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextScaled = true
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Parent = MainFrame
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 8)
+BtnCorner.Parent = ToggleBtn
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 25)
+Status.Position = UDim2.new(0, 0, 1, -30)
+Status.BackgroundTransparency = 1
+Status.Text = "OFF - Ready"
+Status.TextColor3 = Color3.fromRGB(255, 0, 0)
+Status.TextScaled = true
+Status.Font = Enum.Font.Gotham
+Status.Parent = MainFrame
+
+-- Draggable GUI
+local dragging, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Đổi key
+KeyBox.FocusLost:Connect(function()
+    local keyStr = KeyBox.Text:upper()
+    local key = Enum.KeyCode[keyStr]
+    if key then
+        getgenv().ToggleKey = key
+        Status.Text = "Key: " .. keyStr
+        Status.TextColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        KeyBox.Text = getgenv().ToggleKey.Name
+        Status.Text = "Key invalid!"
+        Status.TextColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+-- Functions
+local function StartEffects()
+    if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
+    BaseMyCFrame = Player.Character.HumanoidRootPart.CFrame
+    RelativePositions = {}
+    
+    -- Init relative pos cho players hiện tại
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= Player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local root = plr.Character.HumanoidRootPart
+            RelativePositions[plr] = BaseMyCFrame:ToObjectSpace(root.CFrame)
+        end
+    end
+    
+    -- Hitbox expander loop
+    HitboxConnection = RunService.Heartbeat:Connect(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= Player and plr.Character and plr.Character:FindFirstChild("Head") then
+                local head = plr.Character.Head
+                head.Size = Vector3.new(getgenv().HitboxSize, getgenv().HitboxSize, getgenv().HitboxSize)
+                head.Transparency = 0.4
+                head.CanCollide = false
+                head.Material = Enum.Material.ForceField  -- Glow effect
+            end
+        end
+    end)
+    
+    -- Freeze relative loop
+    FreezeConnection = RunService.Heartbeat:Connect(function()
+        if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
+        local myRoot = Player.Character.HumanoidRootPart.CFrame
+        for plr, relCFrame in pairs(RelativePositions) do
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local root = plr.Character.HumanoidRootPart
+                root.CFrame = myRoot * relCFrame
+            end
+        end
+        -- New players
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= Player and not RelativePositions[plr] and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                RelativePositions[plr] = BaseMyCFrame:ToObjectSpace(plr.Character.HumanoidRootPart.CFrame)
+            end
+        end
+    end)
+end
+
+local function StopEffects()
+    if HitboxConnection then HitboxConnection:Disconnect(); HitboxConnection = nil end
+    if FreezeConnection then FreezeConnection:Disconnect(); FreezeConnection = nil end
+    
+    -- Restore hitbox (approx)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then
+            local head = plr.Character:FindFirstChild("Head")
+            if head then
+                head.Size = Vector3.new(2, 1, 1)
+                head.Transparency = 0
+                head.Material = Enum.Material.SmoothPlastic
+            end
+        end
+    end
+    
+    RelativePositions = {}
+    BaseMyCFrame = nil
+end
+
+-- Toggle
+local function Toggle()
+    if getgenv().Enabled then
+        StopEffects()
+        getgenv().Enabled = false
+        ToggleBtn.Text = "ON/OFF (E)"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        Status.Text = "OFF - Ready"
+        Status.TextColor3 = Color3.fromRGB(255, 0, 0)
+    else
+        StartEffects()
+        getgenv().Enabled = true
+        ToggleBtn.Text = "ON (E to OFF)"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+        Status.Text = "ON - Hitbox + Freeze Active"
+        Status.TextColor3 = Color3.fromRGB(0, 255, 0)
+    end
+end
+
+ToggleBtn.MouseButton1Click:Connect(Toggle)
+
+-- Keybind
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == getgenv().ToggleKey then
+        Toggle()
+    end
+end)
+
+-- Respawn/Death reset
+Player.CharacterRemoving:Connect(function()
+    getgenv().Enabled = false
+    StopEffects()
+    ToggleBtn.Text = "ON/OFF (E)"
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    Status.Text = "OFF - Respawned"
+    Status.TextColor3 = Color3.fromRGB(255, 0, 0)
+end)
+
+Player.CharacterAdded:Connect(function()
+    task.wait(1)  -- Wait load
+    if getgenv().Enabled then
+        task.wait(1)
+        StartEffects()
+    end
+end)
+
+print("Hitbox + Freeze GUI Loaded! | Key: E | Kéo GUI để di chuyển | Đổi key trong ô TextBox")
+print("Console: getgenv().HitboxSize = 20 để hitbox to hơn!")
