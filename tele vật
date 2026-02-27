@@ -1,0 +1,263 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local UIS = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+--------------------------------------------------
+-- 🎨 GUI SETUP
+--------------------------------------------------
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ProTeleportGui_V2"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Toggle Button
+local Toggle = Instance.new("TextButton")
+Toggle.Size = UDim2.new(0,120,0,40)
+Toggle.Position = UDim2.new(0,20,0.5,-20)
+Toggle.Text = "⚡ MENU"
+Toggle.TextScaled = true
+Toggle.BackgroundColor3 = Color3.fromRGB(20,20,20)
+Toggle.TextColor3 = Color3.new(1,1,1)
+Toggle.Parent = ScreenGui
+Toggle.AutoButtonColor = false
+Toggle.Draggable = true -- Cho phép kéo thả nút Menu
+Toggle.Active = true    -- Kích hoạt tương tác
+
+local toggleCorner = Instance.new("UICorner", Toggle)
+toggleCorner.CornerRadius = UDim.new(0,12)
+
+--------------------------------------------------
+-- MAIN FRAME
+--------------------------------------------------
+
+local Frame = Instance.new("Frame")
+-- Tăng kích thước Frame để chứa thêm ô nhập liệu
+Frame.Size = UDim2.new(0,0,0,0) -- Size khi đóng
+local OpenSize = UDim2.new(0,400,0,380) -- Size khi mở
+
+Frame.Position = UDim2.new(0.5,-200,0.5,-190)
+Frame.BackgroundColor3 = Color3.fromRGB(25,25,35)
+Frame.Visible = false
+Frame.Parent = ScreenGui
+Frame.Active = true
+Frame.Draggable = true
+Frame.ClipsDescendants = true
+
+local corner = Instance.new("UICorner", Frame)
+corner.CornerRadius = UDim.new(0,20)
+
+local stroke = Instance.new("UIStroke", Frame)
+stroke.Color = Color3.fromRGB(0,170,255)
+stroke.Thickness = 2
+
+local gradient = Instance.new("UIGradient", Frame)
+gradient.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0,170,255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(140,0,255))
+}
+
+--------------------------------------------------
+-- UI ELEMENTS (Title & Inputs)
+--------------------------------------------------
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,40)
+Title.BackgroundTransparency = 1
+Title.Text = "⚡ TELEPORT V2 ⚡"
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Parent = Frame
+
+-- Hàm tạo TextBox cho gọn code
+local function createInput(placeholder, yPos, defaultText)
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.85, 0, 0, 35)
+	box.Position = UDim2.new(0.075, 0, yPos, 0)
+	box.PlaceholderText = placeholder
+	box.Text = defaultText or ""
+	box.TextSize = 14
+	box.Font = Enum.Font.Gotham
+	box.BackgroundColor3 = Color3.fromRGB(40,40,60)
+	box.TextColor3 = Color3.new(1,1,1)
+	box.PlaceholderColor3 = Color3.fromRGB(180,180,180)
+	box.Parent = Frame
+	
+	local boxCorner = Instance.new("UICorner", box)
+	boxCorner.CornerRadius = UDim.new(0,8)
+	
+	return box
+end
+
+-- 1. Ô nhập tên vật
+local NameBox = createInput("Nhập tên vật (VD: Apple)...", 0.15, "")
+
+-- 2. Ô nhập khoảng cách Spawn (Offset)
+local OffsetBox = createInput("Khoảng cách Spawn (Studs)", 0.28, "6")
+
+-- 3. Ô nhập Bán kính tìm (Radius)
+local RadiusBox = createInput("Bán kính tìm (Để trống = Vô hạn)", 0.41, "")
+
+--------------------------------------------------
+-- BUTTON CREATOR FUNCTION
+--------------------------------------------------
+
+local function createButton(text, yPos, color)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.85,0,0,40)
+	btn.Position = UDim2.new(0.075,0,yPos,0)
+	btn.Text = text
+	btn.TextScaled = true
+	btn.Font = Enum.Font.GothamBold
+	btn.BackgroundColor3 = color or Color3.fromRGB(0,120,255)
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.AutoButtonColor = false
+	btn.Parent = Frame
+	
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,12)
+	
+	-- Hover Effect
+	btn.MouseEnter:Connect(function()
+		TweenService:Create(btn,TweenInfo.new(0.2),{
+			BackgroundColor3 = Color3.fromRGB(0,200,255)
+		}):Play()
+	end)
+	
+	btn.MouseLeave:Connect(function()
+		TweenService:Create(btn,TweenInfo.new(0.2),{
+			BackgroundColor3 = color or Color3.fromRGB(0,120,255)
+		}):Play()
+	end)
+	
+	-- Click ripple effect
+	btn.MouseButton1Click:Connect(function()
+		local ripple = Instance.new("Frame")
+		ripple.Size = UDim2.new(0,0,0,0)
+		ripple.Position = UDim2.new(0.5,0,0.5,0)
+		ripple.BackgroundColor3 = Color3.new(1,1,1)
+		ripple.BackgroundTransparency = 0.5
+		ripple.Parent = btn
+		Instance.new("UICorner", ripple).CornerRadius = UDim.new(1,0)
+		
+		TweenService:Create(ripple,TweenInfo.new(0.4),{
+			Size = UDim2.new(1.5,0,1.5,0),
+			BackgroundTransparency = 1
+		}):Play()
+		
+		task.delay(0.4,function()
+			ripple:Destroy()
+		end)
+	end)
+	
+	return btn
+end
+
+local TeleNearest = createButton("Teleport Gần Nhất", 0.60, Color3.fromRGB(0, 150, 200))
+local TeleAll = createButton("Teleport Tất Cả", 0.75, Color3.fromRGB(200, 50, 50))
+
+--------------------------------------------------
+-- TOGGLE MENU ANIMATION (No Blur)
+--------------------------------------------------
+
+local open = false
+
+Toggle.MouseButton1Click:Connect(function()
+	open = not open
+	
+	if open then
+		Frame.Visible = true
+		TweenService:Create(Frame,TweenInfo.new(0.4,Enum.EasingStyle.Back),{
+			Size = OpenSize
+		}):Play()
+		-- Đã xóa Blur
+	else
+		TweenService:Create(Frame,TweenInfo.new(0.3),{
+			Size = UDim2.new(0,0,0,0)
+		}):Play()
+		-- Đã xóa Blur
+		
+		task.delay(0.3,function()
+			Frame.Visible = false
+		end)
+	end
+end)
+
+--------------------------------------------------
+-- UTILITIES
+--------------------------------------------------
+
+local function getSettings()
+	local name = NameBox.Text
+	
+	-- Lấy khoảng cách spawn, mặc định là 6 nếu để trống hoặc nhập sai
+	local offsetDist = tonumber(OffsetBox.Text)
+	if not offsetDist then offsetDist = 6 end
+	
+	-- Lấy bán kính, mặc định là vô cực nếu để trống
+	local radiusDist = tonumber(RadiusBox.Text)
+	if not radiusDist or RadiusBox.Text == "" then radiusDist = math.huge end
+	
+	return name, offsetDist, radiusDist
+end
+
+--------------------------------------------------
+-- TELEPORT LOGIC
+--------------------------------------------------
+
+local function getNearestObject(name, radius)
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	
+	local root = char.HumanoidRootPart
+	local nearest
+	local dist = math.huge
+	
+	for _,obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and string.lower(obj.Name) == string.lower(name) then
+			local d = (obj.Position - root.Position).Magnitude
+			-- Kiểm tra bán kính
+			if d <= radius and d < dist then
+				dist = d
+				nearest = obj
+			end
+		end
+	end
+	
+	return nearest
+end
+
+TeleNearest.MouseButton1Click:Connect(function()
+	local name, offsetVal, radiusVal = getSettings()
+	if name == "" then return end
+	
+	local nearest = getNearestObject(name, radiusVal)
+	if nearest then
+		-- Sử dụng offsetVal thay vì số cố định -6
+		nearest.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -offsetVal)
+	end
+end)
+
+TeleAll.MouseButton1Click:Connect(function()
+	local name, offsetVal, radiusVal = getSettings()
+	if name == "" then return end
+	
+	local root = player.Character.HumanoidRootPart
+	
+	for _,obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and string.lower(obj.Name) == string.lower(name) then
+			local d = (obj.Position - root.Position).Magnitude
+			
+			-- Chỉ tele nếu nằm trong bán kính cho phép
+			if d <= radiusVal then
+				obj.CFrame = root.CFrame * CFrame.new(0, 0, -offsetVal)
+			end
+		end
+	end
+end)
+
+print("🔥 PRO TELEPORT V2 LOADED")
