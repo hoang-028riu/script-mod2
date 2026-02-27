@@ -1,0 +1,270 @@
+--[[
+    FLING GUI WITH POWER SLIDER
+    Original: Infinite Yield
+    Modified by Gemini
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- // BIẾN TRẠNG THÁI //
+local flinging = false
+local noclipConnection = nil
+local flingPower = 20000 -- Sức mạnh mặc định
+local maxPower = 100000  -- Sức mạnh tối đa
+
+-- // TẠO GUI //
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local ToggleButton = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+local UICorner_Btn = Instance.new("UICorner")
+
+-- Slider Elements
+local PowerLabel = Instance.new("TextLabel")
+local SliderBG = Instance.new("Frame")
+local SliderFill = Instance.new("Frame")
+local SliderButton = Instance.new("TextButton")
+local ValueLabel = Instance.new("TextLabel")
+local UICorner_SliderBG = Instance.new("UICorner")
+local UICorner_SliderFill = Instance.new("UICorner")
+
+-- Thiết lập ScreenGui
+ScreenGui.Name = "FlingGui"
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false 
+
+-- Thiết lập MainFrame (Tăng chiều cao để chứa slider)
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
+MainFrame.Size = UDim2.new(0, 220, 0, 170) -- Tăng chiều cao lên 170
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+UICorner.Parent = MainFrame
+
+-- Tiêu đề
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1.000
+Title.Position = UDim2.new(0, 0, 0, 5)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "FLING MENU"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 20.000
+
+-- Nút Bật/Tắt
+ToggleButton.Parent = MainFrame
+ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+ToggleButton.Position = UDim2.new(0.1, 0, 0.25, 0) -- Đẩy nút lên trên
+ToggleButton.Size = UDim2.new(0.8, 0, 0.25, 0)
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Text = "OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 24.000
+
+UICorner_Btn.Parent = ToggleButton
+
+-- // SLIDER SETUP //
+
+-- Label "Fling Power"
+PowerLabel.Parent = MainFrame
+PowerLabel.BackgroundTransparency = 1
+PowerLabel.Position = UDim2.new(0.1, 0, 0.55, 0)
+PowerLabel.Size = UDim2.new(0.8, 0, 0, 20)
+PowerLabel.Font = Enum.Font.GothamBold
+PowerLabel.Text = "Fling Power"
+PowerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+PowerLabel.TextSize = 14
+PowerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Hiển thị số Power
+ValueLabel.Parent = MainFrame
+ValueLabel.BackgroundTransparency = 1
+ValueLabel.Position = UDim2.new(0.1, 0, 0.55, 0)
+ValueLabel.Size = UDim2.new(0.8, 0, 0, 20)
+ValueLabel.Font = Enum.Font.Gotham
+ValueLabel.Text = tostring(flingPower)
+ValueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+ValueLabel.TextSize = 14
+ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+-- Thanh nền Slider
+SliderBG.Parent = MainFrame
+SliderBG.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+SliderBG.Position = UDim2.new(0.1, 0, 0.75, 0)
+SliderBG.Size = UDim2.new(0.8, 0, 0, 10)
+UICorner_SliderBG.Parent = SliderBG
+UICorner_SliderBG.CornerRadius = UDim.new(1, 0)
+
+-- Thanh Fill (Phần đã chọn)
+SliderFill.Parent = SliderBG
+SliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+SliderFill.Size = UDim2.new(flingPower / maxPower, 0, 1, 0)
+UICorner_SliderFill.Parent = SliderFill
+UICorner_SliderFill.CornerRadius = UDim.new(1, 0)
+
+-- Nút vô hình để bắt sự kiện kéo
+SliderButton.Parent = SliderBG
+SliderButton.BackgroundTransparency = 1
+SliderButton.Size = UDim2.new(1, 0, 1, 0)
+SliderButton.Text = ""
+
+-- // LOGIC SLIDER //
+local mouse = LocalPlayer:GetMouse()
+local draggingSlider = false
+
+local function UpdateSlider()
+    local sliderPos = SliderBG.AbsolutePosition.X
+    local sliderSize = SliderBG.AbsoluteSize.X
+    local mousePos = mouse.X
+    
+    -- Tính toán phần trăm dựa trên vị trí chuột
+    local percent = math.clamp((mousePos - sliderPos) / sliderSize, 0, 1)
+    
+    -- Cập nhật biến Power
+    flingPower = math.floor(percent * maxPower)
+    
+    -- Cập nhật giao diện
+    SliderFill.Size = UDim2.new(percent, 0, 1, 0)
+    ValueLabel.Text = tostring(flingPower)
+end
+
+SliderButton.MouseButton1Down:Connect(function()
+    draggingSlider = true
+    UpdateSlider()
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        UpdateSlider()
+    end
+end)
+
+-- // CHỨC NĂNG FLING CHÍNH //
+
+local function StartFling()
+    local Character = LocalPlayer.Character
+    if not Character then return end
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    if not RootPart then return end
+
+    flinging = true
+    
+    ToggleButton.Text = "ON"
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(60, 255, 60)
+
+    -- 1. Vật lý
+    for _, child in pairs(Character:GetDescendants()) do
+        if child:IsA("BasePart") then
+            child.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5)
+        end
+    end
+
+    -- 2. Noclip
+    if noclipConnection then noclipConnection:Disconnect() end
+    noclipConnection = RunService.Stepped:Connect(function()
+        if flinging and Character then
+            for _, v in pairs(Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
+            end
+        end
+    end)
+
+    -- 3. Tạo lực xoay
+    local bambam = Instance.new("BodyAngularVelocity")
+    bambam.Name = "FlingVelocity"
+    bambam.Parent = RootPart
+    bambam.AngularVelocity = Vector3.new(0, flingPower, 0) -- Sử dụng biến flingPower
+    bambam.MaxTorque = Vector3.new(0, math.huge, 0)
+    bambam.P = math.huge
+
+    -- 4. Massless
+    for i, v in next, Character:GetChildren() do
+        if v:IsA("BasePart") then
+            v.Massless = true
+            v.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+
+    -- 5. Loop (Cập nhật liên tục để đảm bảo xoay và nhận giá trị Power mới)
+    task.spawn(function()
+        while flinging and Character and RootPart and bambam.Parent do
+            -- Cập nhật Power realtime từ thanh slider
+            bambam.AngularVelocity = Vector3.new(0, flingPower, 0)
+            task.wait(0.2)
+            bambam.AngularVelocity = Vector3.new(0, 0, 0)
+            task.wait(0.1)
+        end
+    end)
+    
+    local humanoid = Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Died:Connect(function()
+            if flinging then StopFling() end
+        end)
+    end
+end
+
+function StopFling()
+    flinging = false
+    
+    ToggleButton.Text = "OFF"
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+
+    local Character = LocalPlayer.Character
+    if not Character then return end
+    
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    if RootPart then
+        for _, v in pairs(RootPart:GetChildren()) do
+            if v.Name == "FlingVelocity" or v:IsA("BodyAngularVelocity") then
+                v:Destroy()
+            end
+        end
+        RootPart.Velocity = Vector3.new(0,0,0)
+        RootPart.RotVelocity = Vector3.new(0,0,0)
+    end
+
+    for _, child in pairs(Character:GetDescendants()) do
+        if child:IsA("BasePart") then
+            child.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
+            child.Massless = false
+            child.CanCollide = true
+        end
+    end
+end
+
+ToggleButton.MouseButton1Click:Connect(function()
+    if flinging then
+        StopFling()
+    else
+        StartFling()
+    end
+end)
+
+-- Notification
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Fling GUI";
+    Text = "Added Power Slider!";
+    Duration = 5;
+})
