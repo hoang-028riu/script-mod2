@@ -1,0 +1,207 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- --- TẠO GIAO DIỆN (GUI) ---
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MenuKhoaTruc_V2"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false 
+
+-- Khung nền (Frame)
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 240)
+frame.Position = UDim2.new(0.05, 0, 0.5, -120)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.BorderSizePixel = 2
+frame.Active = true -- Bật tính năng tương tác để kéo thả
+frame.Parent = screenGui
+
+-- Tiêu đề (Dùng để nắm kéo)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "MENU ĐIỀU KHIỂN"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+title.Parent = frame
+
+-- --- CHỨC NĂNG KÉO THẢ (DRAG) ---
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+	local delta = input.Position - dragStart
+	frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+title.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+title.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		update(input)
+	end
+end)
+
+-- --- BIẾN TRẠNG THÁI ---
+local isLockedX = false
+local isLockedZ = false
+local isLockedY = false
+local lockPos = {X = 0, Y = 0, Z = 0}
+
+-- Nền đất ảo để fix lỗi animation lơ lửng
+local airPlatform = nil 
+
+-- --- HÀM TẠO NÚT ---
+local function taoNut(ten, viTriY, mauSac)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.9, 0, 0, 35)
+	btn.Position = UDim2.new(0.05, 0, 0, viTriY)
+	btn.Text = ten
+	btn.BackgroundColor3 = mauSac or Color3.fromRGB(200, 50, 50)
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 16
+	btn.Parent = frame
+	local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,6); corner.Parent = btn
+	return btn
+end
+
+-- Tạo các nút
+local btnX = taoNut("Khóa X (Trái/Phải): TẮT", 40)
+local btnZ = taoNut("Khóa Z (Trước/Sau): TẮT", 80)
+local btnY = taoNut("Khóa Y (Độ cao): TẮT", 120, Color3.fromRGB(200, 150, 50))
+local btnGiamY = taoNut("GIẢM ĐỘ CAO (Xuống)", 165, Color3.fromRGB(50, 100, 200))
+
+btnGiamY.Visible = false
+
+-- --- XỬ LÝ SỰ KIỆN NÚT ---
+
+btnX.MouseButton1Click:Connect(function()
+	isLockedX = not isLockedX
+	if isLockedX and player.Character then lockPos.X = player.Character.HumanoidRootPart.Position.X end
+	btnX.Text = isLockedX and "Khóa X: BẬT" or "Khóa X: TẮT"
+	btnX.BackgroundColor3 = isLockedX and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+end)
+
+btnZ.MouseButton1Click:Connect(function()
+	isLockedZ = not isLockedZ
+	if isLockedZ and player.Character then lockPos.Z = player.Character.HumanoidRootPart.Position.Z end
+	btnZ.Text = isLockedZ and "Khóa Z: BẬT" or "Khóa Z: TẮT"
+	btnZ.BackgroundColor3 = isLockedZ and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+end)
+
+btnY.MouseButton1Click:Connect(function()
+	isLockedY = not isLockedY
+	if isLockedY and player.Character then 
+		lockPos.Y = player.Character.HumanoidRootPart.Position.Y 
+		btnGiamY.Visible = true 
+		
+		-- TẠO NỀN ĐẤT ẢO KHI BẬT KHÓA Y
+		if not airPlatform then
+			airPlatform = Instance.new("Part")
+			airPlatform.Name = "AirPlatform_FixAnim"
+			airPlatform.Size = Vector3.new(10, 1, 10) -- Rộng 10x10 để đi lại ko bị lọt
+			airPlatform.Anchored = true
+			airPlatform.Transparency = 1 -- Tàng hình
+			airPlatform.CanCollide = true
+			airPlatform.Parent = workspace
+		end
+	else
+		btnGiamY.Visible = false
+		
+		-- XÓA NỀN ĐẤT ẢO KHI TẮT KHÓA Y
+		if airPlatform then
+			airPlatform:Destroy()
+			airPlatform = nil
+		end
+	end
+	
+	btnY.Text = isLockedY and "Khóa Y: BẬT (Ko nhảy)" or "Khóa Y (Độ cao): TẮT"
+	btnY.BackgroundColor3 = isLockedY and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 150, 50)
+end)
+
+local holdingDown = false
+btnGiamY.MouseButton1Down:Connect(function() holdingDown = true end)
+btnGiamY.MouseButton1Up:Connect(function() holdingDown = false end)
+btnGiamY.MouseLeave:Connect(function() holdingDown = false end)
+
+-- --- VÒNG LẶP CHÍNH (RENDER STEPPED) ---
+RunService.RenderStepped:Connect(function()
+	local char = player.Character
+	if not char then return end
+	local rootPart = char:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return end
+	
+	local currentPos = rootPart.Position
+	local newX, newY, newZ = currentPos.X, currentPos.Y, currentPos.Z
+	local vel = rootPart.AssemblyLinearVelocity
+	
+	-- Xử lý Khóa X
+	if isLockedX then
+		newX = lockPos.X
+		vel = Vector3.new(0, vel.Y, vel.Z)
+	end
+	
+	-- Xử lý Khóa Z
+	if isLockedZ then
+		newZ = lockPos.Z
+		vel = Vector3.new(vel.X, vel.Y, 0)
+	end
+	
+	-- Xử lý Khóa Y
+	if isLockedY then
+		if holdingDown then
+			lockPos.Y = lockPos.Y - 0.5 
+		end
+		
+		newY = lockPos.Y
+		vel = Vector3.new(vel.X, 0, vel.Z) 
+		
+		-- DI CHUYỂN NỀN ĐẤT ẢO THEO CHÂN NHÂN VẬT
+		if airPlatform then
+			-- Trừ đi 3.1 studs để mặt phẳng nằm vừa khít ngay dưới lòng bàn chân
+			airPlatform.Position = Vector3.new(currentPos.X, newY - 3.1, currentPos.Z)
+		end
+	end
+	
+	-- Cập nhật CFrame nếu có khóa bất kỳ trục nào
+	if isLockedX or isLockedZ or isLockedY then
+		rootPart.CFrame = CFrame.new(newX, newY, newZ) * rootPart.CFrame.Rotation
+		rootPart.AssemblyLinearVelocity = vel
+	end
+end)
+
+-- Reset khi chết
+player.CharacterAdded:Connect(function()
+	isLockedX, isLockedZ, isLockedY = false, false, false
+	holdingDown = false
+	btnX.Text = "Khóa X: TẮT"; btnX.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	btnZ.Text = "Khóa Z: TẮT"; btnZ.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	btnY.Text = "Khóa Y (Độ cao): TẮT"; btnY.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
+	btnGiamY.Visible = false
+	
+	if airPlatform then
+		airPlatform:Destroy()
+		airPlatform = nil
+	end
+end)
