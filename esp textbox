@@ -1,0 +1,289 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui") -- Dùng CoreGui để vẽ ESP đè lên mọi thứ (nếu exploit hỗ trợ)
+local UIS = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--------------------------------------------------
+-- 🎨 GUI SETUP (Main)
+--------------------------------------------------
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ProESPGui_V3"
+ScreenGui.ResetOnSpawn = false
+-- Thử parent vào PlayerGui
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Nút mở Menu (Giữ nguyên tính năng kéo thả)
+local Toggle = Instance.new("TextButton")
+Toggle.Size = UDim2.new(0,120,0,40)
+Toggle.Position = UDim2.new(0,20,0.5,-20)
+Toggle.Text = "👁 ESP MENU"
+Toggle.TextScaled = true
+Toggle.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Toggle.TextColor3 = Color3.fromRGB(0,255,150)
+Toggle.Parent = ScreenGui
+Toggle.AutoButtonColor = false
+Toggle.Draggable = true
+Toggle.Active = true
+
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0,12)
+local toggleStroke = Instance.new("UIStroke", Toggle)
+toggleStroke.Color = Color3.fromRGB(0,255,150)
+toggleStroke.Thickness = 1.5
+
+--------------------------------------------------
+-- MAIN FRAME (Có Scroll)
+--------------------------------------------------
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0,0,0,0) -- Size đóng
+local OpenSize = UDim2.new(0,350,0,450) -- Size mở (Cao hơn để chứa scroll)
+
+Frame.Position = UDim2.new(0.5,-175,0.5,-225)
+Frame.BackgroundColor3 = Color3.fromRGB(20,20,25)
+Frame.Visible = false
+Frame.Parent = ScreenGui
+Frame.Active = true
+Frame.Draggable = true
+Frame.ClipsDescendants = true
+
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0,15)
+
+-- Viền Gradient
+local stroke = Instance.new("UIStroke", Frame)
+stroke.Thickness = 2
+local gradient = Instance.new("UIGradient", stroke)
+gradient.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0,255,150)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0,150,255))
+}
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,40)
+Title.BackgroundTransparency = 1
+Title.Text = "🔍 MULTI ESP TOOL"
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Parent = Frame
+
+-- Container cho nút bấm chức năng (Nằm dưới cùng)
+local BottomContainer = Instance.new("Frame")
+BottomContainer.Size = UDim2.new(1,0,0,100)
+BottomContainer.Position = UDim2.new(0,0,1,-100)
+BottomContainer.BackgroundTransparency = 1
+BottomContainer.Parent = Frame
+
+-- SCROLLING FRAME (Chứa các ô nhập liệu)
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1,-20,1,-150) -- Chừa chỗ cho Title và BottomContainer
+ScrollFrame.Position = UDim2.new(0,10,0,45)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.ScrollBarThickness = 6
+ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(0,255,150)
+ScrollFrame.CanvasSize = UDim2.new(0,0,0,0) -- Sẽ tự động giãn
+ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Quan trọng: Tự giãn khi thêm ô
+ScrollFrame.Parent = Frame
+
+local UIList = Instance.new("UIListLayout", ScrollFrame)
+UIList.Padding = UDim.new(0, 10)
+UIList.SortOrder = Enum.SortOrder.LayoutOrder
+UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+--------------------------------------------------
+-- FUNCTION: THÊM Ô NHẬP LIỆU (ROW)
+--------------------------------------------------
+
+local function createInputRow(defaultText)
+	local rowFrame = Instance.new("Frame")
+	rowFrame.Size = UDim2.new(0.95, 0, 0, 40)
+	rowFrame.BackgroundColor3 = Color3.fromRGB(35,35,45)
+	rowFrame.Parent = ScrollFrame
+	Instance.new("UICorner", rowFrame).CornerRadius = UDim.new(0,8)
+	
+	-- Ô nhập tên
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.75, 0, 1, 0)
+	box.Position = UDim2.new(0, 10, 0, 0)
+	box.BackgroundTransparency = 1
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.PlaceholderText = "Nhập tên (VD: Táo)..."
+	box.Text = defaultText or ""
+	box.TextColor3 = Color3.new(1,1,1)
+	box.TextSize = 14
+	box.Font = Enum.Font.Gotham
+	box.Parent = rowFrame
+	
+	-- Nút Xóa (X)
+	local delBtn = Instance.new("TextButton")
+	delBtn.Size = UDim2.new(0, 30, 0, 30)
+	delBtn.AnchorPoint = Vector2.new(1, 0.5)
+	delBtn.Position = UDim2.new(1, -5, 0.5, 0)
+	delBtn.Text = "X"
+	delBtn.TextColor3 = Color3.fromRGB(255,80,80)
+	delBtn.BackgroundColor3 = Color3.fromRGB(50,30,30)
+	delBtn.Font = Enum.Font.GothamBold
+	delBtn.Parent = rowFrame
+	Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0,6)
+	
+	delBtn.MouseButton1Click:Connect(function()
+		rowFrame:Destroy()
+	end)
+	
+	return box
+end
+
+-- Tạo sẵn 1 ô đầu tiên
+createInputRow("")
+
+--------------------------------------------------
+-- BUTTONS LOGIC
+--------------------------------------------------
+
+-- Hàm tạo nút chuẩn
+local function createButton(text, color, layoutOrder)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.9,0,0,35)
+	-- Sắp xếp vị trí dựa trên layoutOrder thủ công vì Parent là Frame thường
+	if layoutOrder == 1 then
+		btn.Position = UDim2.new(0.05,0,0.1,0)
+	elseif layoutOrder == 2 then
+		btn.Position = UDim2.new(0.05,0,0.55,0)
+	end
+	
+	btn.Text = text
+	btn.Font = Enum.Font.GothamBold
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.BackgroundColor3 = color
+	btn.Parent = BottomContainer
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
+	return btn
+end
+
+local AddBoxBtn = createButton("+ Thêm ô nhập", Color3.fromRGB(60,60,80), 1)
+local ScanBtn = createButton("👁 BẬT/CẬP NHẬT ESP", Color3.fromRGB(0,180,100), 2)
+
+AddBoxBtn.MouseButton1Click:Connect(function()
+	createInputRow()
+end)
+
+--------------------------------------------------
+-- ESP LOGIC (CORE)
+--------------------------------------------------
+
+local ESP_Folder = Instance.new("Folder")
+ESP_Folder.Name = "ProESP_Storage"
+ESP_Folder.Parent = game.CoreGui -- Để ẩn khỏi workspace game (anti-detection nhẹ)
+
+-- Hàm xóa sạch ESP cũ
+local function clearESP()
+	ESP_Folder:ClearAllChildren()
+end
+
+-- Hàm tạo Highlight cho vật thể
+local function highlightObject(obj)
+	-- Kiểm tra nếu đã có ESP rồi thì thôi
+	if obj:FindFirstChild("HasESP_Tag") then return end
+	
+	-- Tạo Highlight (Nhìn xuyên tường tốt nhất hiện nay)
+	local hl = Instance.new("Highlight")
+	hl.Name = "ProESP_Highlight"
+	hl.Adornee = obj
+	hl.FillColor = Color3.fromRGB(255, 50, 50) -- Màu đỏ bên trong
+	hl.FillTransparency = 0.5
+	hl.OutlineColor = Color3.fromRGB(255, 255, 255) -- Viền trắng
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- QUAN TRỌNG: Nhìn xuyên tường
+	hl.Parent = ESP_Folder
+	
+	-- BillboardGui để hiện tên (Optional - cho ngầu)
+	local bb = Instance.new("BillboardGui")
+	bb.Adornee = obj
+	bb.Size = UDim2.new(0,100,0,50)
+	bb.StudsOffset = Vector3.new(0,2,0)
+	bb.AlwaysOnTop = true
+	bb.Parent = ESP_Folder
+	
+	local txt = Instance.new("TextLabel", bb)
+	txt.Size = UDim2.new(1,0,1,0)
+	txt.BackgroundTransparency = 1
+	txt.Text = obj.Name
+	txt.TextColor3 = Color3.new(1,1,0)
+	txt.TextStrokeTransparency = 0
+	txt.Font = Enum.Font.GothamBold
+	txt.TextSize = 12
+end
+
+-- Hàm quét và áp dụng
+ScanBtn.MouseButton1Click:Connect(function()
+	clearESP() -- Xóa cũ trước khi tìm mới
+	
+	-- 1. Lấy danh sách từ khóa từ các ô TextBox
+	local keywords = {}
+	for _, child in pairs(ScrollFrame:GetChildren()) do
+		if child:IsA("Frame") then -- Mỗi dòng là 1 Frame
+			local box = child:FindFirstChild("TextBox")
+			if box and box.Text ~= "" then
+				table.insert(keywords, string.lower(box.Text)) -- Lưu dạng chữ thường để so sánh
+			end
+		end
+	end
+	
+	if #keywords == 0 then return end -- Không nhập gì thì thôi
+	
+	-- 2. Quét toàn bộ workspace
+	local count = 0
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+			local objNameLow = string.lower(obj.Name)
+			
+			-- Kiểm tra xem tên vật có chứa bất kỳ từ khóa nào không
+			for _, key in pairs(keywords) do
+				-- SỬ DỤNG STRING.FIND ĐỂ TÌM 1 PHẦN TÊN (VD: "táo" khớp "táo vàng")
+				if string.find(objNameLow, key) then
+					highlightObject(obj)
+					count = count + 1
+					break -- Đã tìm thấy khớp 1 từ khóa, không cần check từ khóa khác cho vật này nữa
+				end
+			end
+		end
+	end
+	
+	ScanBtn.Text = "Đã tìm thấy: " .. count .. " vật!"
+	task.delay(2, function()
+		ScanBtn.Text = "👁 BẬT/CẬP NHẬT ESP"
+	end)
+end)
+
+--------------------------------------------------
+-- TOGGLE MENU ANIMATION
+--------------------------------------------------
+
+local open = false
+
+Toggle.MouseButton1Click:Connect(function()
+	open = not open
+	
+	if open then
+		Frame.Visible = true
+		TweenService:Create(Frame,TweenInfo.new(0.4,Enum.EasingStyle.Back),{
+			Size = OpenSize
+		}):Play()
+	else
+		TweenService:Create(Frame,TweenInfo.new(0.3),{
+			Size = UDim2.new(0,0,0,0)
+		}):Play()
+		
+		task.delay(0.3,function()
+			Frame.Visible = false
+		end)
+	end
+end)
+
+print("🔥 PRO ESP V3 MULTI-INPUT LOADED")
