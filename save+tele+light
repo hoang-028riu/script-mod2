@@ -1,0 +1,411 @@
+--// Advanced Multi-Slot Teleport + Light Menu V2 (Modern UI)
+--// Remastered by Gemini
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+--// CẤU HÌNH DỮ LIỆU
+local slots = {}
+local slotCount = 0
+local lightLevel = 0
+local lightRange = 60
+local lightObject = nil
+
+--// MÀU SẮC GIAO DIỆN
+local COLORS = {
+	Background = Color3.fromRGB(35, 35, 40),
+	Header = Color3.fromRGB(45, 45, 50),
+	ButtonDefault = Color3.fromRGB(60, 60, 65),
+	ButtonHover = Color3.fromRGB(75, 75, 80),
+	Text = Color3.fromRGB(240, 240, 240),
+	Accent = Color3.fromRGB(0, 170, 255), -- Màu xanh chủ đạo
+	Success = Color3.fromRGB(46, 204, 113),
+	Warning = Color3.fromRGB(241, 196, 15),
+	Danger = Color3.fromRGB(231, 76, 60)
+}
+
+-------------------------------------------------------
+-- HỆ THỐNG XỬ LÝ ÁNH SÁNG
+-------------------------------------------------------
+local function updateLight()
+	character = player.Character or player.CharacterAdded:Wait()
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	if not lightObject then
+		lightObject = Instance.new("PointLight")
+		lightObject.Name = "UserFlashlight"
+		lightObject.Parent = root
+		lightObject.Color = Color3.fromRGB(255, 250, 220)
+		lightObject.Shadows = true
+	end
+	
+	-- Đảm bảo đèn luôn theo người
+	if lightObject.Parent ~= root then
+		lightObject.Parent = root
+	end
+
+	lightObject.Range = lightRange
+	lightObject.Brightness = lightLevel
+end
+
+-------------------------------------------------------
+-- HÀM TẠO GUI BO TRÒN (HELPER)
+-------------------------------------------------------
+local function addCorner(instance, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = instance
+	return corner
+end
+
+local function addPadding(instance, amount)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, amount)
+	pad.PaddingRight = UDim.new(0, amount)
+	pad.PaddingTop = UDim.new(0, amount)
+	pad.PaddingBottom = UDim.new(0, amount)
+	pad.Parent = instance
+end
+
+-------------------------------------------------------
+-- GUI CHÍNH
+-------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ModernTeleportGUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Khung Chính
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 320, 0, 450) -- Rộng hơn một chút để cân đối
+mainFrame.Position = UDim2.new(0.5, -160, 0.5, -225) -- Căn giữa màn hình
+mainFrame.BackgroundColor3 = COLORS.Background
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+addCorner(mainFrame, 10)
+
+-- Thêm viền mỏng cho đẹp
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(60, 60, 60)
+stroke.Thickness = 1.5
+stroke.Parent = mainFrame
+
+--// CHỨC NĂNG KÉO THẢ (DRAGGABLE)
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+	local delta = input.Position - dragStart
+	mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		if dragging then
+			update(input)
+		end
+	end
+end)
+
+--// TIÊU ĐỀ HEADER
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 40)
+header.BackgroundColor3 = COLORS.Header
+header.BorderSizePixel = 0
+header.Parent = mainFrame
+addCorner(header, 10)
+
+-- Che phần dưới của header bo tròn để nối liền với body
+local headerCover = Instance.new("Frame")
+headerCover.Size = UDim2.new(1, 0, 0, 10)
+headerCover.Position = UDim2.new(0, 0, 1, -10)
+headerCover.BackgroundColor3 = COLORS.Header
+headerCover.BorderSizePixel = 0
+headerCover.Parent = header
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Text = "MENU TIỆN ÍCH"
+titleLabel.Size = UDim2.new(1, -20, 1, 0)
+titleLabel.Position = UDim2.new(0, 20, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.TextColor3 = COLORS.Text
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 18
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = header
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Text = "X" -- Nút tắt/mở nhỏ gọn
+closeBtn.Size = UDim2.new(0, 40, 1, 0)
+closeBtn.Position = UDim2.new(1, -40, 0, 0)
+closeBtn.BackgroundTransparency = 1
+closeBtn.TextColor3 = COLORS.Danger
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.Parent = header
+closeBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = false
+	-- Tạo nút mở lại nhỏ ở góc nếu cần (để đơn giản thì chỉ ẩn, bạn có thể thêm logic mở lại)
+    print("Đã ẩn menu. Reset nhân vật để hiện lại hoặc chạy lại script.")
+end)
+
+--// VÙNG CHỨA NỘI DUNG (CONTAINER)
+local contentContainer = Instance.new("ScrollingFrame")
+contentContainer.Size = UDim2.new(1, 0, 1, -50)
+contentContainer.Position = UDim2.new(0, 0, 0, 50)
+contentContainer.BackgroundTransparency = 1
+contentContainer.ScrollBarThickness = 4
+contentContainer.BorderSizePixel = 0
+contentContainer.Parent = mainFrame
+addPadding(contentContainer, 15)
+
+local uiList = Instance.new("UIListLayout")
+uiList.SortOrder = Enum.SortOrder.LayoutOrder
+uiList.Padding = UDim.new(0, 15)
+uiList.Parent = contentContainer
+
+--// PHẦN 1: ÁNH SÁNG (LIGHT CONTROL)
+local function createSectionHeader(text, layoutOrder)
+	local label = Instance.new("TextLabel")
+	label.Text = text
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = COLORS.Accent
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.LayoutOrder = layoutOrder
+	label.Parent = contentContainer
+end
+
+createSectionHeader("ĐIỀU KHIỂN ĐÈN", 1)
+
+local lightControlFrame = Instance.new("Frame")
+lightControlFrame.Size = UDim2.new(1, 0, 0, 100)
+lightControlFrame.BackgroundColor3 = COLORS.ButtonDefault
+lightControlFrame.LayoutOrder = 2
+lightControlFrame.Parent = contentContainer
+addCorner(lightControlFrame, 8)
+
+-- Grid Layout cho phần đèn
+local lightGrid = Instance.new("UIGridLayout")
+lightGrid.CellSize = UDim2.new(0.48, 0, 0, 40)
+lightGrid.CellPadding = UDim2.new(0.04, 0, 0, 10)
+lightGrid.FillDirectionMaxCells = 2
+lightGrid.Parent = lightControlFrame
+addPadding(lightControlFrame, 10)
+
+-- Nút Tăng sáng
+local btnLightUp = Instance.new("TextButton")
+btnLightUp.Text = "Tăng Sáng (+)"
+btnLightUp.BackgroundColor3 = COLORS.Warning
+btnLightUp.TextColor3 = Color3.fromRGB(30,30,30)
+btnLightUp.Font = Enum.Font.GothamBold
+btnLightUp.TextSize = 14
+btnLightUp.Parent = lightControlFrame
+addCorner(btnLightUp, 6)
+
+-- Nút Reset
+local btnLightReset = Instance.new("TextButton")
+btnLightReset.Text = "Tắt Đèn"
+btnLightReset.BackgroundColor3 = COLORS.Danger
+btnLightReset.TextColor3 = COLORS.Text
+btnLightReset.Font = Enum.Font.GothamBold
+btnLightReset.TextSize = 14
+btnLightReset.Parent = lightControlFrame
+addCorner(btnLightReset, 6)
+
+-- Input Range
+local rangeInput = Instance.new("TextBox")
+rangeInput.PlaceholderText = "Phạm vi (Range)"
+rangeInput.Text = "Range: " .. lightRange
+rangeInput.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+rangeInput.TextColor3 = COLORS.Text
+rangeInput.Font = Enum.Font.GothamMedium
+rangeInput.TextSize = 14
+rangeInput.Parent = lightControlFrame
+addCorner(rangeInput, 6)
+
+-- Info Label
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Text = "Độ sáng: 0"
+infoLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+infoLabel.TextColor3 = COLORS.Text
+infoLabel.Font = Enum.Font.GothamMedium
+infoLabel.TextSize = 14
+infoLabel.Parent = lightControlFrame
+addCorner(infoLabel, 6)
+
+--// PHẦN 2: TELEPORT
+createSectionHeader("QUẢN LÝ VỊ TRÍ (TELEPORT)", 3)
+
+local addSlotBtn = Instance.new("TextButton")
+addSlotBtn.Text = "+ Thêm Vị Trí Mới"
+addSlotBtn.Size = UDim2.new(1, 0, 0, 40)
+addSlotBtn.BackgroundColor3 = COLORS.Success
+addSlotBtn.TextColor3 = Color3.new(1,1,1)
+addSlotBtn.Font = Enum.Font.GothamBold
+addSlotBtn.TextSize = 16
+addSlotBtn.LayoutOrder = 4
+addSlotBtn.Parent = contentContainer
+addCorner(addSlotBtn, 8)
+
+local slotsContainer = Instance.new("Frame")
+slotsContainer.Name = "SlotsContainer"
+slotsContainer.Size = UDim2.new(1, 0, 0, 0) -- Sẽ tự động giãn (AutomaticSize)
+slotsContainer.AutomaticSize = Enum.AutomaticSize.Y
+slotsContainer.BackgroundTransparency = 1
+slotsContainer.LayoutOrder = 5
+slotsContainer.Parent = contentContainer
+
+local slotListLayout = Instance.new("UIListLayout")
+slotListLayout.Padding = UDim.new(0, 8)
+slotListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+slotListLayout.Parent = slotsContainer
+
+-------------------------------------------------------
+-- LOGIC FUNCTION
+-------------------------------------------------------
+
+-- Logic Đèn
+btnLightUp.MouseButton1Click:Connect(function()
+	lightLevel = lightLevel + 0.5 -- Tăng nhẹ nhàng hơn
+	updateLight()
+	infoLabel.Text = "Độ sáng: " .. lightLevel
+end)
+
+btnLightReset.MouseButton1Click:Connect(function()
+	lightLevel = 0
+	updateLight()
+	infoLabel.Text = "Độ sáng: 0"
+end)
+
+rangeInput.FocusLost:Connect(function(enter)
+	local num = tonumber(string.match(rangeInput.Text, "%d+")) -- Lấy số từ text
+	if num then
+		lightRange = math.clamp(num, 10, 200) -- Giới hạn range an toàn
+		updateLight()
+		rangeInput.Text = "Range: " .. lightRange
+	else
+		rangeInput.Text = "Range: " .. lightRange
+	end
+end)
+
+-- Logic Tạo Slot
+local function createSlot()
+	slotCount = slotCount + 1
+	local currentSlotIndex = slotCount
+	slots[currentSlotIndex] = nil -- Init slot
+	
+	-- Container cho mỗi slot
+	local slotFrame = Instance.new("Frame")
+	slotFrame.Size = UDim2.new(1, 0, 0, 45)
+	slotFrame.BackgroundColor3 = COLORS.ButtonDefault
+	slotFrame.Parent = slotsContainer
+	addCorner(slotFrame, 6)
+	
+	-- Số thứ tự
+	local indexLabel = Instance.new("TextLabel")
+	indexLabel.Text = "#" .. currentSlotIndex
+	indexLabel.Size = UDim2.new(0, 30, 1, 0)
+	indexLabel.BackgroundTransparency = 1
+	indexLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	indexLabel.Font = Enum.Font.GothamBold
+	indexLabel.TextSize = 18
+	indexLabel.Parent = slotFrame
+	
+	-- Nút Lưu (Save)
+	local btnSave = Instance.new("TextButton")
+	btnSave.Text = "Lưu Tọa Độ"
+	btnSave.Size = UDim2.new(0, 100, 0, 30)
+	btnSave.Position = UDim2.new(0, 35, 0.5, -15) -- Căn giữa theo chiều dọc
+	btnSave.BackgroundColor3 = COLORS.Accent
+	btnSave.TextColor3 = Color3.new(1,1,1)
+	btnSave.Font = Enum.Font.GothamBold
+	btnSave.TextSize = 12
+	btnSave.Parent = slotFrame
+	addCorner(btnSave, 4)
+	
+	-- Nút Dịch chuyển (TP)
+	local btnTP = Instance.new("TextButton")
+	btnTP.Text = "Dịch Chuyển"
+	btnTP.Size = UDim2.new(0, 100, 0, 30)
+	btnTP.Position = UDim2.new(1, -105, 0.5, -15)
+	btnTP.BackgroundColor3 = Color3.fromRGB(80, 80, 85) -- Màu xám (chưa có dữ liệu)
+	btnTP.TextColor3 = Color3.fromRGB(180, 180, 180)
+	btnTP.Font = Enum.Font.GothamBold
+	btnTP.TextSize = 12
+	btnTP.AutoButtonColor = false -- Tắt hiệu ứng nhấn khi chưa có data
+	btnTP.Parent = slotFrame
+	addCorner(btnTP, 4)
+	
+	-- Sự kiện Lưu
+	btnSave.MouseButton1Click:Connect(function()
+		character = player.Character or player.CharacterAdded:Wait()
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			slots[currentSlotIndex] = character.HumanoidRootPart.Position
+			
+			-- Hiệu ứng UI khi lưu thành công
+			btnSave.Text = "Đã Lưu!"
+			btnSave.BackgroundColor3 = COLORS.Success
+			
+			-- Kích hoạt nút TP
+			btnTP.BackgroundColor3 = COLORS.Warning
+			btnTP.TextColor3 = Color3.fromRGB(30,30,30)
+			btnTP.AutoButtonColor = true
+			btnTP.Text = "TP Đến Đây"
+			
+			task.wait(1)
+			btnSave.Text = "Ghi Đè"
+			btnSave.BackgroundColor3 = COLORS.Accent
+		end
+	end)
+	
+	-- Sự kiện TP
+	btnTP.MouseButton1Click:Connect(function()
+		if slots[currentSlotIndex] then
+			character = player.Character or player.CharacterAdded:Wait()
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				character:MoveTo(slots[currentSlotIndex])
+			end
+		else
+			-- Hiệu ứng báo lỗi nhẹ
+			local originColor = btnTP.BackgroundColor3
+			btnTP.Text = "Trống!"
+			btnTP.BackgroundColor3 = COLORS.Danger
+			task.wait(0.5)
+			btnTP.Text = "Dịch Chuyển"
+			btnTP.BackgroundColor3 = originColor
+		end
+	end)
+	
+	-- Cập nhật CanvasSize của thanh cuộn
+	contentContainer.CanvasSize = UDim2.new(0, 0, 0, 0) -- Reset để tự động tính toán lại
+end
+
+addSlotBtn.MouseButton1Click:Connect(createSlot)
+
+-- Khởi tạo 1 slot đầu tiên
+createSlot()
