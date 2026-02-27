@@ -1,0 +1,193 @@
+--⚡ KỸ NĂNG LƯỚT TASUYA STYLE - CÓ HIỆU ỨNG SAU LƯNG & LƯU SAU RESPAWN
+-- By ChatGPT GPT-5
+
+--📦 Dịch vụ
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
+
+local player = Players.LocalPlayer
+
+--📊 Biến
+local dashDistance = 20
+local cooldownTime = 5
+local canDash = true
+
+--🧠 Lưu dữ liệu
+local savedData = {
+	dashDistance = dashDistance,
+	cooldownTime = cooldownTime
+}
+
+--⚙️ GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "DashSkillGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Nút hồi chiêu
+local cdFrame = Instance.new("Frame")
+cdFrame.Size = UDim2.new(0, 80, 0, 80)
+cdFrame.Position = UDim2.new(0.9, -40, 0.8, -40)
+cdFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+cdFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+cdFrame.BorderSizePixel = 0
+cdFrame.Parent = gui
+Instance.new("UICorner", cdFrame).CornerRadius = UDim.new(1, 0)
+
+local cdText = Instance.new("TextLabel")
+cdText.Size = UDim2.new(1, 0, 1, 0)
+cdText.BackgroundTransparency = 1
+cdText.Text = "Q"
+cdText.Font = Enum.Font.GothamBold
+cdText.TextScaled = true
+cdText.TextColor3 = Color3.fromRGB(255,255,255)
+cdText.Parent = cdFrame
+
+local cdCircle = Instance.new("Frame")
+cdCircle.Size = UDim2.new(1, 0, 1, 0)
+cdCircle.Position = UDim2.new(0, 0, 0, 0)
+cdCircle.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+cdCircle.BackgroundTransparency = 0.5
+cdCircle.BorderSizePixel = 0
+cdCircle.Parent = cdFrame
+Instance.new("UICorner", cdCircle).CornerRadius = UDim.new(1, 0)
+
+--⚙️ Bảng chỉnh
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Size = UDim2.new(0, 220, 0, 150)
+settingsFrame.Position = UDim2.new(0.02, 0, 0.6, 0)
+settingsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+settingsFrame.Parent = gui
+Instance.new("UICorner", settingsFrame).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 25)
+title.Text = "⚙️ Tùy chỉnh Dash"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.Parent = settingsFrame
+
+local distanceBox = Instance.new("TextBox")
+distanceBox.Size = UDim2.new(0.8, 0, 0, 30)
+distanceBox.Position = UDim2.new(0.1, 0, 0.3, 0)
+distanceBox.PlaceholderText = "Khoảng cách (stud)"
+distanceBox.Text = tostring(dashDistance)
+distanceBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+distanceBox.TextColor3 = Color3.fromRGB(255,255,255)
+distanceBox.Font = Enum.Font.Gotham
+distanceBox.TextScaled = true
+distanceBox.Parent = settingsFrame
+Instance.new("UICorner", distanceBox).CornerRadius = UDim.new(0,6)
+
+local cdBox = Instance.new("TextBox")
+cdBox.Size = UDim2.new(0.8, 0, 0, 30)
+cdBox.Position = UDim2.new(0.1, 0, 0.6, 0)
+cdBox.PlaceholderText = "Hồi chiêu (giây)"
+cdBox.Text = tostring(cooldownTime)
+cdBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+cdBox.TextColor3 = Color3.fromRGB(255,255,255)
+cdBox.Font = Enum.Font.Gotham
+cdBox.TextScaled = true
+cdBox.Parent = settingsFrame
+Instance.new("UICorner", cdBox).CornerRadius = UDim.new(0,6)
+
+local saveBtn = Instance.new("TextButton")
+saveBtn.Size = UDim2.new(0.6, 0, 0, 30)
+saveBtn.Position = UDim2.new(0.2, 0, 0.85, 0)
+saveBtn.Text = "💾 Lưu"
+saveBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+saveBtn.TextColor3 = Color3.fromRGB(255,255,255)
+saveBtn.Font = Enum.Font.GothamBold
+saveBtn.TextScaled = true
+saveBtn.Parent = settingsFrame
+Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0,8)
+
+saveBtn.MouseButton1Click:Connect(function()
+	local d = tonumber(distanceBox.Text)
+	local c = tonumber(cdBox.Text)
+	if d then dashDistance = d savedData.dashDistance = d end
+	if c then cooldownTime = c savedData.cooldownTime = c end
+end)
+
+--✨ Hiệu ứng tia sáng sau lưng
+local function createTrail(hrp)
+	-- Tạo 2 attachment: 1 ở giữa, 1 lùi về sau lưng
+	local attach1 = Instance.new("Attachment", hrp)
+	attach1.Position = Vector3.new(0, 1, 0)
+	local attach2 = Instance.new("Attachment", hrp)
+	attach2.Position = Vector3.new(0, 1, 3)
+
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = attach1
+	trail.Attachment1 = attach2
+	trail.Lifetime = 0.4
+	trail.Color = ColorSequence.new(Color3.fromRGB(0,200,255), Color3.fromRGB(255,255,255))
+	trail.Transparency = NumberSequence.new(0.1, 1)
+	trail.LightEmission = 1
+	trail.Enabled = true
+	trail.Parent = hrp
+
+	-- Tạo ánh sáng khi lướt
+	local light = Instance.new("PointLight", hrp)
+	light.Color = Color3.fromRGB(0, 200, 255)
+	light.Brightness = 5
+	light.Range = 10
+
+	Debris:AddItem(trail, 0.6)
+	Debris:AddItem(attach1, 0.6)
+	Debris:AddItem(attach2, 0.6)
+	Debris:AddItem(light, 0.6)
+end
+
+--⚡ Dash function
+local function dash(hrp)
+	if not canDash then return end
+	canDash = false
+
+	createTrail(hrp)
+
+	local lookVector = hrp.CFrame.LookVector
+	local targetPos = hrp.Position + (lookVector * dashDistance)
+	local tween = TweenService:Create(hrp, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = CFrame.new(targetPos, targetPos + lookVector)})
+	tween:Play()
+
+	local timeLeft = cooldownTime
+	cdText.Text = tostring(timeLeft)
+	cdCircle.Size = UDim2.new(1,0,1,0)
+
+	while timeLeft > 0 do
+		task.wait(1)
+		timeLeft -= 1
+		cdText.Text = timeLeft > 0 and tostring(timeLeft) or "Q"
+		cdCircle.Size = UDim2.new(timeLeft/cooldownTime, 0, timeLeft/cooldownTime, 0)
+	end
+
+	canDash = true
+end
+
+--🎮 Nhấn Q để kích hoạt
+UIS.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.Q and canDash then
+		local char = player.Character
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			dash(char.HumanoidRootPart)
+		end
+	end
+end)
+
+--♻️ Khôi phục sau khi respawn
+player.CharacterAdded:Connect(function(char)
+	char:WaitForChild("HumanoidRootPart")
+	canDash = true
+	dashDistance = savedData.dashDistance
+	cooldownTime = savedData.cooldownTime
+	distanceBox.Text = tostring(dashDistance)
+	cdBox.Text = tostring(cooldownTime)
+	cdText.Text = "Q"
+	cdCircle.Size = UDim2.new(1,0,1,0)
+end)
