@@ -1,0 +1,226 @@
+--// MÁY BAY CÁ NHÂN (LOCAL SCRIPT) //--
+-- Hướng dẫn: Chạy script này, máy bay sẽ xuất hiện ngay lập tức.
+-- Nhấn 'E' để thoát/hủy máy bay.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = Workspace.CurrentCamera
+
+local planeModel = nil
+local mainPart = nil
+local bodyVelocity = nil
+local bodyGyro = nil
+
+local connection = nil
+local speed = 0
+local maxSpeed = 150
+local acceleration = 2
+local turnSpeed = 2 -- Độ nhạy khi nghiêng (A/D)
+
+local flying = false
+
+--// HÀM TẠO MÁY BAY //--
+local function createPlane()
+	if planeModel then planeModel:Destroy() end
+
+	local char = player.Character
+	if not char then return end
+	local hrp = char:WaitForChild("HumanoidRootPart")
+
+	-- 1. Tạo Model chứa máy bay
+	planeModel = Instance.new("Model")
+	planeModel.Name = "MyLocalPlane"
+	planeModel.Parent = Workspace
+
+	-- 2. Thân máy bay (MainPart)
+	mainPart = Instance.new("Part")
+	mainPart.Name = "Fuselage"
+	mainPart.Size = Vector3.new(4, 4, 12)
+	mainPart.CFrame = hrp.CFrame * CFrame.new(0, 5, 0)
+	mainPart.Color = Color3.fromRGB(200, 50, 50) -- Màu đỏ
+	mainPart.Material = Enum.Material.Metal
+	mainPart.Parent = planeModel
+
+	-- 3. Cánh máy bay (Wings)
+	local wings = Instance.new("Part")
+	wings.Name = "Wings"
+	wings.Size = Vector3.new(18, 1, 4)
+	wings.CFrame = mainPart.CFrame * CFrame.new(0, 0, -2)
+	wings.Color = Color3.fromRGB(50, 50, 50) -- Màu xám
+	wings.Material = Enum.Material.Metal
+	wings.Parent = planeModel
+
+	local wingWeld = Instance.new("WeldConstraint")
+	wingWeld.Part0 = mainPart
+	wingWeld.Part1 = wings
+	wingWeld.Parent = mainPart
+
+	-- 4. Đuôi máy bay (Tail)
+	local tail = Instance.new("Part")
+	tail.Name = "Tail"
+	tail.Size = Vector3.new(6, 1, 3)
+	tail.CFrame = mainPart.CFrame * CFrame.new(0, 0.5, 5)
+	tail.Color = Color3.fromRGB(50, 50, 50)
+	tail.Parent = planeModel
+
+	local tailWeld = Instance.new("WeldConstraint")
+	tailWeld.Part0 = mainPart
+	tailWeld.Part1 = tail
+	tailWeld.Parent = mainPart
+
+	-- 5. Cánh đuôi đứng (Vertical Stabilizer)
+	local vTail = Instance.new("Part")
+	vTail.Name = "VerticalTail"
+	vTail.Size = Vector3.new(1, 4, 3)
+	vTail.CFrame = mainPart.CFrame * CFrame.new(0, 2, 5)
+	vTail.Color = Color3.fromRGB(200, 50, 50)
+	vTail.Parent = planeModel
+
+	local vTailWeld = Instance.new("WeldConstraint")
+	vTailWeld.Part0 = mainPart
+	vTailWeld.Part1 = vTail
+	vTailWeld.Parent = mainPart
+
+	-- 6. Động cơ cánh quạt (Visual)
+	local propeller = Instance.new("Part")
+	propeller.Size = Vector3.new(8, 1, 0.5)
+	propeller.CFrame = mainPart.CFrame * CFrame.new(0, 0, -6.5)
+	propeller.Color = Color3.fromRGB(20, 20, 20)
+	propeller.Parent = planeModel
+	
+	local propWeld = Instance.new("Weld") -- Dùng Weld thường để xoay
+	propWeld.Part0 = mainPart
+	propWeld.Part1 = propeller
+	propWeld.C0 = CFrame.new(0, 0, -6.5)
+	propWeld.Parent = mainPart
+
+	-- Tạo hiệu ứng quay cánh quạt
+	task.spawn(function()
+		while planeModel and planeModel.Parent do
+			propWeld.C0 = propWeld.C0 * CFrame.Angles(0, 0, 0.5)
+			task.wait()
+		end
+	end)
+
+	--// GẮN NGƯỜI VÀO MÁY BAY //--
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.PlatformStand = true -- Tắt vật lý chân nhân vật
+	end
+
+	-- Weld nhân vật vào máy bay
+	local seatWeld = Instance.new("WeldConstraint")
+	seatWeld.Part0 = mainPart
+	seatWeld.Part1 = hrp
+	seatWeld.Parent = mainPart
+	
+	-- Đặt người chơi ngồi lên trên thân
+	hrp.CFrame = mainPart.CFrame * CFrame.new(0, 3, 0)
+
+	--// VẬT LÝ BAY //--
+	bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	bodyVelocity.Velocity = Vector3.zero
+	bodyVelocity.Parent = mainPart
+
+	bodyGyro = Instance.new("BodyGyro")
+	bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	bodyGyro.D = 500
+	bodyGyro.P = 10000
+	bodyGyro.CFrame = mainPart.CFrame
+	bodyGyro.Parent = mainPart
+
+	flying = true
+	camera.CameraSubject = mainPart -- Camera đi theo máy bay
+end
+
+--// HÀM XÓA MÁY BAY //--
+local function destroyPlane()
+	flying = false
+	if connection then connection:Disconnect() end
+	
+	if planeModel then planeModel:Destroy() end
+	planeModel = nil
+	
+	local char = player.Character
+	if char then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.PlatformStand = false
+		end
+		camera.CameraSubject = humanoid -- Trả camera về người
+	end
+end
+
+--// VÒNG LẶP ĐIỀU KHIỂN //--
+local function startLoop()
+	connection = RunService.RenderStepped:Connect(function(dt)
+		if not flying or not mainPart then return end
+
+		-- 1. Xử lý Tốc độ (W/S)
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			speed = math.min(speed + acceleration, maxSpeed)
+		elseif UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			speed = math.max(speed - acceleration, 0)
+		end
+
+		-- 2. Xử lý Nghiêng (A/D - Roll)
+		local roll = 0
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+			roll = turnSpeed
+		elseif UserInputService:IsKeyDown(Enum.KeyCode.D) then
+			roll = -turnSpeed
+		end
+
+		-- 3. Xử lý Hướng (Theo chuột)
+		local mousePos = mouse.Hit.Position
+		local direction = (mousePos - mainPart.Position).Unit
+		
+		-- Tạo CFrame hướng theo chuột nhưng giữ độ nghiêng (Roll)
+		local targetCFrame = CFrame.new(mainPart.Position, mainPart.Position + direction)
+		targetCFrame = targetCFrame * CFrame.Angles(0, 0, math.rad(roll * 20))
+
+		-- Cập nhật Gyro (Xoay)
+		bodyGyro.CFrame = bodyGyro.CFrame:Lerp(targetCFrame, 0.1)
+
+		-- Cập nhật Velocity (Di chuyển thẳng về phía trước của máy bay)
+		bodyVelocity.Velocity = mainPart.CFrame.LookVector * speed
+	end)
+end
+
+--// PHÍM TẮT //--
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	
+	if input.KeyCode == Enum.KeyCode.G then -- Nhấn G để tạo máy bay
+		if not flying then
+			createPlane()
+			startLoop()
+			print("✈️ Plane Spawned! Press W to fly.")
+		else
+			print("⚠️ Plane already exists.")
+		end
+	end
+
+	if input.KeyCode == Enum.KeyCode.E then -- Nhấn E để thoát
+		if flying then
+			destroyPlane()
+			print("👋 Exited Plane.")
+		end
+	end
+end)
+
+-- Tạo GUI hướng dẫn nhỏ
+local screenGui = Instance.new("ScreenGui", game.CoreGui)
+local label = Instance.new("TextLabel", screenGui)
+label.Size = UDim2.new(0, 200, 0, 50)
+label.Position = UDim2.new(0, 10, 0.5, 0)
+label.BackgroundTransparency = 0.5
+label.BackgroundColor3 = Color3.new(0,0,0)
+label.TextColor3 = Color3.new(1,1,1)
+label.Text = "Nhấn 'G' để gọi máy bay\nNhấn 'E' để hủy\nW/S: Tăng/Giảm tốc\nChuột: Điều hướng"
