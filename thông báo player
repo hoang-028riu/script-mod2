@@ -1,0 +1,28 @@
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- Hàm gửi thông báo
+local function guiThongBao(player)
+	-- Sử dụng hệ thống thông báo mặc định của Roblox (góc dưới bên phải)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Người chơi mới", -- Tiêu đề thông báo
+			Text = player.Name .. " đã vào server!", -- Nội dung
+			Duration = 5, -- Thời gian hiện thông báo (giây)
+			-- Icon = "rbxassetid://123456789" -- Bạn có thể thêm ID ảnh vào đây nếu muốn
+		})
+	end)
+end
+
+-- 1. Xử lý những người chơi vào SAU khi bạn đã ở trong game
+Players.PlayerAdded:Connect(function(player)
+	guiThongBao(player)
+end)
+
+-- 2. (Tùy chọn) Nếu bạn muốn thông báo cả những người đã ở đó TRƯỚC khi bạn vào:
+-- for _, player in ipairs(Players:GetPlayers()) do
+-- 	if player ~= LocalPlayer then
+-- 		guiThongBao(player)
+-- 	end
+-- end
