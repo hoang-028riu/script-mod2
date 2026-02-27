@@ -1,0 +1,128 @@
+--[[
+	WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+-- FAKE HEAD + NON-COLLIDING LARGE HITBOX    
+-- Head follows real head appearance, no collision, no face on hitbox    
+
+_G.HeadSize = 9    
+_G.Disabled = true    
+local UPDATE_INTERVAL = 1.5    
+
+local Players = game:GetService("Players")    
+local LocalPlayer = Players.LocalPlayer    
+
+---------------------------------------------------------    
+-- Find head part    
+---------------------------------------------------------    
+local function findHead(char)    
+	for _, v in ipairs(char:GetChildren()) do    
+		if v:IsA("BasePart") and v.Name:lower():find("head") then    
+			return v    
+		end    
+	end    
+	return nil    
+end    
+
+---------------------------------------------------------    
+-- Remove face from real head (hitbox)    
+---------------------------------------------------------    
+local function removeFace(head)
+	for _, v in ipairs(head:GetChildren()) do
+		if v:IsA("Decal") then
+			v:Destroy()
+		end
+	end
+end
+
+---------------------------------------------------------    
+-- Create fake head (clone real head appearance)    
+---------------------------------------------------------    
+local function createFakeHead(realHead)    
+	local fake = realHead:FindFirstChild("FakeHead")    
+	if fake then return fake end    
+
+	fake = Instance.new("Part")    
+	fake.Name = "FakeHead"    
+	fake.Size = Vector3.new(2, 1, 1)    
+	fake.Anchored = false    
+	fake.CanCollide = false    
+	fake.Massless = true    
+	fake.CastShadow = false    
+	fake.Transparency = 0    
+	fake.Parent = realHead    
+
+	-- Clone mesh / texture    
+	if realHead:IsA("MeshPart") then    
+		fake.Color = realHead.Color    
+		local mesh = Instance.new("SpecialMesh")    
+		mesh.MeshId = realHead.MeshId    
+		mesh.TextureId = realHead.TextureID    
+		mesh.Parent = fake    
+	else    
+		local mesh = realHead:FindFirstChildOfClass("SpecialMesh")    
+		if mesh then    
+			local clone = mesh:Clone()    
+			clone.Parent = fake    
+		end    
+		fake.Color = realHead.Color    
+	end    
+
+	-- Clone face decal to fake head (if any)
+	local face = realHead:FindFirstChildWhichIsA("Decal")
+	if face then
+		local faceClone = face:Clone()
+		faceClone.Parent = fake
+	end
+
+	-- Weld to real head    
+	local weld = Instance.new("Weld")    
+	weld.Part0 = realHead    
+	weld.Part1 = fake    
+	weld.C0 = CFrame.new()    
+	weld.C1 = CFrame.new()    
+	weld.Parent = fake    
+
+	return fake    
+end    
+
+---------------------------------------------------------    
+-- Apply large hitbox (no collision)    
+---------------------------------------------------------    
+local function applyHitbox(head)    
+	pcall(function()    
+		head.Size = Vector3.new(_G.HeadSize, _G.HeadSize, _G.HeadSize)    
+		head.CanCollide = false    
+		head.Massless = true    
+		head.LocalTransparencyModifier = 1    
+	end)    
+end    
+
+---------------------------------------------------------    
+-- Track players    
+---------------------------------------------------------    
+local function trackPlayer(player)    
+	if player == LocalPlayer then return end    
+
+	local function attach(character)    
+		task.spawn(function()    
+			while character.Parent and player.Parent and _G.Disabled do    
+				local head = findHead(character)    
+				if head then    
+					applyHitbox(head)        -- hitbox (non-colliding)    
+					removeFace(head)        -- remove face from real head    
+					createFakeHead(head)    -- visible fake head    
+				end    
+				task.wait(UPDATE_INTERVAL)    
+			end    
+		end)    
+	end    
+
+	player.CharacterAdded:Connect(attach)    
+	if player.Character then attach(player.Character) end    
+end    
+
+for _, plr in ipairs(Players:GetPlayers()) do    
+	trackPlayer(plr)    
+end    
+
+Players.PlayerAdded:Connect(trackPlayer)
