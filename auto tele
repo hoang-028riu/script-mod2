@@ -1,0 +1,204 @@
+-- ⚡ Auto Tele Follow Behind + Xoay Nhân Vật (không xoay camera)
+-- Giữ vị trí sau đối thủ, nhân vật luôn quay mặt về hướng họ
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- 🧭 GUI setup
+local gui = Instance.new("ScreenGui")
+gui.Name = "TeleFollowBehindUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 260, 0, 130)
+frame.Position = UDim2.new(0.7, 0, 0.6, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 28)
+title.Text = "⚡ Auto Tele Follow Behind"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.new(1,1,1)
+title.TextScaled = true
+title.Parent = frame
+
+local distLabel = Instance.new("TextLabel")
+distLabel.Text = "Distance (stud):"
+distLabel.Position = UDim2.new(0, 10, 0, 35)
+distLabel.Size = UDim2.new(0, 120, 0, 20)
+distLabel.BackgroundTransparency = 1
+distLabel.TextColor3 = Color3.new(1,1,1)
+distLabel.Parent = frame
+
+local distBox = Instance.new("TextBox")
+distBox.Text = "5"
+distBox.Position = UDim2.new(0, 140, 0, 33)
+distBox.Size = UDim2.new(0, 110, 0, 24)
+distBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+distBox.TextColor3 = Color3.new(1,1,1)
+distBox.Parent = frame
+
+local upLabel = Instance.new("TextLabel")
+upLabel.Text = "Up Offset:"
+upLabel.Position = UDim2.new(0, 10, 0, 63)
+upLabel.Size = UDim2.new(0, 120, 0, 20)
+upLabel.BackgroundTransparency = 1
+upLabel.TextColor3 = Color3.new(1,1,1)
+upLabel.Parent = frame
+
+local upBox = Instance.new("TextBox")
+upBox.Text = "1.5"
+upBox.Position = UDim2.new(0, 140, 0, 61)
+upBox.Size = UDim2.new(0, 110, 0, 24)
+upBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+upBox.TextColor3 = Color3.new(1,1,1)
+upBox.Parent = frame
+
+local intervalLabel = Instance.new("TextLabel")
+intervalLabel.Text = "Change Every (s):"
+intervalLabel.Position = UDim2.new(0, 10, 0, 91)
+intervalLabel.Size = UDim2.new(0, 120, 0, 20)
+intervalLabel.BackgroundTransparency = 1
+intervalLabel.TextColor3 = Color3.new(1,1,1)
+intervalLabel.Parent = frame
+
+local intervalBox = Instance.new("TextBox")
+intervalBox.Text = "0.5"
+intervalBox.Position = UDim2.new(0, 140, 0, 89)
+intervalBox.Size = UDim2.new(0, 110, 0, 24)
+intervalBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+intervalBox.TextColor3 = Color3.new(1,1,1)
+intervalBox.Parent = frame
+
+local toggle = Instance.new("TextButton")
+toggle.Text = "Bật Auto Tele (Q)"
+toggle.Position = UDim2.new(0, 10, 0, 118)
+toggle.Size = UDim2.new(1, -20, 0, 28)
+toggle.BackgroundColor3 = Color3.fromRGB(60,120,60)
+toggle.TextColor3 = Color3.new(1,1,1)
+toggle.TextScaled = true
+toggle.Parent = frame
+
+-- ⚙️ Logic
+local autoTele = false
+local currentIndex = 1
+local followConn = nil
+
+local function getCharHRP()
+	local char = player.Character or player.CharacterAdded:Wait()
+	local hrp = char:WaitForChild("HumanoidRootPart")
+	return char, hrp
+end
+
+local function getAlivePlayers()
+	local list = {}
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				table.insert(list, plr)
+			end
+		end
+	end
+	return list
+end
+
+local function startFollow(targetPlayer)
+	if followConn then
+		followConn:Disconnect()
+		followConn = nil
+	end
+
+	local _, myHRP = getCharHRP()
+	local targetChar = targetPlayer.Character
+	if not targetChar then return end
+	local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+	if not targetHRP then return end
+
+	local dist = tonumber(distBox.Text) or 5
+	local up = tonumber(upBox.Text) or 1.5
+
+	followConn = RunService.RenderStepped:Connect(function()
+		if not autoTele or not targetChar or not targetHRP or not targetHRP.Parent then
+			return
+		end
+
+		-- Giữ vị trí sau lưng đối thủ
+		local behind = -targetHRP.CFrame.LookVector * dist
+		local newPos = targetHRP.Position + behind + Vector3.new(0, up, 0)
+		myHRP.CFrame = CFrame.new(newPos, targetHRP.Position)
+
+		-- ✅ Chỉ xoay nhân vật của bạn hướng về kẻ địch
+		local char = player.Character
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			local hrp = char.HumanoidRootPart
+			local lookAt = (targetHRP.Position - hrp.Position).Unit
+			local newCFrame = CFrame.new(hrp.Position, hrp.Position + lookAt)
+			hrp.CFrame = newCFrame
+		end
+	end)
+end
+
+local function teleLoop()
+	while autoTele do
+		local players = getAlivePlayers()
+		if #players == 0 then
+			autoTele = false
+			toggle.Text = "Bật Auto Tele (Q)"
+			toggle.BackgroundColor3 = Color3.fromRGB(60,120,60)
+			break
+		end
+
+		if currentIndex > #players then
+			currentIndex = 1
+		end
+
+		local target = players[currentIndex]
+		if target then
+			startFollow(target)
+		end
+
+		currentIndex += 1
+		local interval = tonumber(intervalBox.Text) or 0.5
+		local elapsed = 0
+		while elapsed < interval do
+			if not autoTele then return end
+			elapsed += RunService.Heartbeat:Wait()
+		end
+	end
+end
+
+local function toggleTele()
+	if autoTele then
+		autoTele = false
+		if followConn then
+			followConn:Disconnect()
+			followConn = nil
+		end
+		toggle.Text = "Bật Auto Tele (Q)"
+		toggle.BackgroundColor3 = Color3.fromRGB(60,120,60)
+	else
+		autoTele = true
+		toggle.Text = "Tắt Auto Tele"
+		toggle.BackgroundColor3 = Color3.fromRGB(160,60,60)
+		task.spawn(teleLoop)
+	end
+end
+
+toggle.MouseButton1Click:Connect(toggleTele)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.Q then
+		toggleTele()
+	end
+end)
+
+print("✅ Auto Tele + Quay nhân vật về hướng địch (không xoay camera).")
