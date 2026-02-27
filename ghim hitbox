@@ -1,0 +1,197 @@
+-- FULL VERSION: GHIM HITBOX VÒNG TRÒN (CHẠY NGAY, BẮN ĐƯỢC!)
+-- LocalScript → StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+
+-- [GUI]
+local screenGui = Instance.new("ScreenGui")
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 300, 0, 80)
+button.Position = UDim2.new(0, 20, 0, 20)
+button.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+button.TextColor3 = Color3.new(1,1,1)
+button.Font = Enum.Font.GothamBold
+button.TextSize = 18
+button.Text = "GHIM VÒNG TRÒN"
+button.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 16)
+corner.Parent = button
+
+-- Hover
+button.MouseEnter:Connect(function()
+    TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+end)
+button.MouseLeave:Connect(function()
+    TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 40, 40)}):Play()
+end)
+
+-- [BIẾN]
+local isPinning = false
+local pinned = {}
+local fakeRoots = {}
+local connections = {}
+local radius = 12
+
+-- [TÍNH BÁN KÍNH]
+local function updateRadius()
+    local count = #pinned
+    radius = math.clamp(8 + count * 0.7, 8, 30)
+    button.Text = string.format("GHIM %d (R=%.0f)", count, radius)
+end
+
+-- [TẠO FAKE ROOT + WELD]
+local function pinPlayer(other)
+    local char = other.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- Ẩn visual (trừ HRP)
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part ~= hrp then
+            part.Transparency = 1
+            part.CanCollide = false
+        elseif part:IsA("Decal") or part:IsA("Texture") then
+            part.Transparency = 1
+        end
+    end
+
+    -- Tạo fake HRP (giữ hitbox thật)
+    local fake = hrp:Clone()
+    fake.Name = "FakeHRP"
+    fake.Anchored = false
+    fake.CanCollide = true
+    fake.Transparency = 0.5
+    fake.Color = Color3.fromRGB(255, 50, 50)
+    fake.Material = Enum.Material.ForceField
+    fake.Size = Vector3.new(2, 2, 1)
+    fake.Parent = workspace
+
+    -- Weld thật vào giả
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = fake
+    weld.Part1 = hrp
+    weld.Parent = fake
+
+    -- Highlight
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Color3.fromRGB(255, 50, 50)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+    highlight.FillTransparency = 0.6
+    highlight.Parent = fake
+
+    -- Tên
+    local bill = Instance.new("BillboardGui")
+    bill.Size = UDim2.new(0, 100, 0, 50)
+    bill.Adornee = fake
+    bill.StudsOffset = Vector3.new(0, 4, 0)
+    bill.Parent = fake
+    local label = Instance.new("TextLabel", bill)
+    label.Size = UDim2.new(1,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = other.Name
+    label.TextColor3 = Color3.new(1,1,0)
+    label.TextStrokeTransparency = 0
+    label.Font = Enum.Font.GothamBold
+
+    fakeRoots[other] = fake
+    table.insert(pinned, {player = other, fake = fake, hrp = hrp})
+    updateRadius()
+end
+
+-- [BẮT ĐẦU GHIM]
+local function startPin()
+    pinned = {}
+    fakeRoots = {}
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            pinPlayer(p)
+        end
+    end
+
+    -- Cập nhật vòng tròn
+    connections.heartbeat = RunService.Heartbeat:Connect(function()
+        local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+
+        for i, data in ipairs(pinned) do
+            local fake = data.fake
+            if fake and fake.Parent then
+                local angle = (i-1) * (math.pi * 2 / #pinned) + tick() * 0.8
+                local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+                local target = myRoot.Position + offset
+                fake.CFrame = CFrame.new(target, myRoot.Position)
+            end
+        end
+    end)
+end
+
+-- [TẮT GHIM]
+local function stopPin()
+    if connections.heartbeat then
+        connections.heartbeat:Disconnect()
+        connections.heartbeat = nil
+    end
+
+    for _, data in ipairs(pinned) do
+        local fake = data.fake
+        if fake and fake.Parent then
+            fake:Destroy()
+        end
+        local char = data.player.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.Transparency = 0
+                    part.CanCollide = true
+                elseif part:IsA("Decal") or part:IsA("Texture") then
+                    part.Transparency = 0
+                end
+            end
+        end
+    end
+
+    pinned = {}
+    fakeRoots = {}
+    button.Text = "GHIM VÒNG TRÒN"
+end
+
+-- [NÚT BẤM]
+button.MouseButton1Click:Connect(function()
+    isPinning = not isPinning
+    if isPinning then
+        button.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        startPin()
+    else
+        button.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+        stopPin()
+    end
+end)
+
+-- [NGƯỜI MỚI / RESPAWN]
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        if isPinning then
+            task.wait(1)
+            stopPin()
+            startPin()
+        end
+    end)
+end)
+
+player.CharacterAdded:Connect(function()
+    if isPinning then
+        task.wait(1)
+        stopPin()
+        startPin()
+    end
+end)
