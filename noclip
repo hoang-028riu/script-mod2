@@ -1,0 +1,120 @@
+--// NoClip GUI Pro Edition
+--// LocalScript - place inside StarterPlayerScripts
+
+-- Biến trạng thái
+_G.NoClipEnabled = false
+
+-- Dịch vụ cần thiết
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- Tạo GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "NoClipProGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Tạo khung chính
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 190, 0, 80)
+frame.Position = UDim2.new(0.05, 0, 0.35, 0)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.BackgroundTransparency = 0.05
+frame.Active = true
+frame.Draggable = true
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+frame.ClipsDescendants = true
+
+-- Đổ bóng cho khung
+local shadow = Instance.new("ImageLabel")
+shadow.Name = "Shadow"
+shadow.Image = "rbxassetid://1316045217"
+shadow.ImageTransparency = 0.4
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(10, 10, 118, 118)
+shadow.Size = UDim2.new(1, 20, 1, 20)
+shadow.Position = UDim2.new(0, -10, 0, -10)
+shadow.BackgroundTransparency = 1
+shadow.ZIndex = 0
+shadow.Parent = frame
+
+-- Viền bo tròn
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 14)
+corner.Parent = frame
+
+-- Tiêu đề
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "🧱 NoClip Mode"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.Parent = frame
+
+-- Nút toggle
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0.7, 0, 0, 35)
+toggle.Position = UDim2.new(0.15, 0, 0.45, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.Text = "OFF"
+toggle.Font = Enum.Font.GothamBold
+toggle.TextScaled = true
+toggle.BorderSizePixel = 0
+toggle.Parent = frame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 10)
+btnCorner.Parent = toggle
+
+-- Hiệu ứng màu mượt khi bật / tắt
+local function animateToggle(state)
+	local colorGoal = state and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(150, 0, 0)
+	local tween = TweenService:Create(toggle, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundColor3 = colorGoal
+	})
+	tween:Play()
+end
+
+-- Chức năng toggle
+local function toggleNoClip()
+	_G.NoClipEnabled = not _G.NoClipEnabled
+	if _G.NoClipEnabled then
+		toggle.Text = "ON"
+	else
+		toggle.Text = "OFF"
+	end
+	animateToggle(_G.NoClipEnabled)
+end
+
+toggle.MouseButton1Click:Connect(toggleNoClip)
+
+-- Xử lý NoClip thực tế
+task.spawn(function()
+	while task.wait() do
+		if _G.NoClipEnabled then
+			local char = player.Character
+			if char then
+				for _, part in ipairs(char:GetDescendants()) do
+					if part:IsA("BasePart") and part.CanCollide then
+						part.CanCollide = false
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Thông báo
+StarterGui:SetCore("SendNotification", {
+	Title = "NoClip Pro";
+	Text = "Script loaded. Click the button to toggle NoClip.";
+	Duration = 5;
+})
