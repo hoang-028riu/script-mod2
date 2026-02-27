@@ -1,0 +1,182 @@
+--// Fly + Noclip + Speed Slider GUI Script (Max speed: 50000)
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+local flying = false
+local noclip = false
+local bodyGyro, bodyVelocity
+local flySpeed = 60
+
+--// GUI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FlyControlGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 180, 0, 110)
+Frame.Position = UDim2.new(0.5, -90, 0.8, -40)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+Title.Text = "⚙️ Fly Control"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+Title.Parent = Frame
+
+-- Ô nhập tốc độ
+local SpeedBox = Instance.new("TextBox")
+SpeedBox.Size = UDim2.new(1, -20, 0, 30)
+SpeedBox.Position = UDim2.new(0, 10, 0, 30)
+SpeedBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedBox.PlaceholderText = "Speed (Default 60)"
+SpeedBox.Text = tostring(flySpeed)
+SpeedBox.ClearTextOnFocus = false
+SpeedBox.Font = Enum.Font.SourceSans
+SpeedBox.TextSize = 14
+SpeedBox.Parent = Frame
+
+-- Nút Noclip (Chỉ bật/tắt khi Click)
+local NoclipBtn = Instance.new("TextButton")
+NoclipBtn.Size = UDim2.new(1, -20, 0, 30)
+NoclipBtn.Position = UDim2.new(0, 10, 0, 65)
+NoclipBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Mặc định OFF
+NoclipBtn.Text = "Noclip: OFF"
+NoclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+NoclipBtn.Font = Enum.Font.SourceSansBold
+NoclipBtn.TextSize = 14
+NoclipBtn.Parent = Frame
+
+--// Xử lý thay đổi tốc độ
+SpeedBox.FocusLost:Connect(function()
+	local val = tonumber(SpeedBox.Text)
+	if val then
+		flySpeed = math.clamp(val, 1, 50000)
+		SpeedBox.Text = tostring(flySpeed)
+	else
+		SpeedBox.Text = tostring(flySpeed)
+	end
+end)
+
+--// Logic Noclip (Luôn chạy ngầm, phụ thuộc vào biến noclip)
+RunService.Stepped:Connect(function()
+	if noclip and character then
+		for _, part in pairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
+-- Hàm bật tắt Noclip bằng Click nút
+local function toggleNoclip()
+	noclip = not noclip
+	if noclip then
+		NoclipBtn.Text = "Noclip: ON"
+		NoclipBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+	else
+		NoclipBtn.Text = "Noclip: OFF"
+		NoclipBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	end
+end
+
+NoclipBtn.MouseButton1Click:Connect(toggleNoclip)
+
+--// Bắt đầu bay
+local function startFlying()
+	if flying then return end
+	flying = true
+
+	bodyGyro = Instance.new("BodyGyro")
+	bodyGyro.P = 9e4
+	bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	bodyGyro.CFrame = humanoidRootPart.CFrame
+	bodyGyro.Parent = humanoidRootPart
+
+	bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	bodyVelocity.Velocity = Vector3.zero
+	bodyVelocity.Parent = humanoidRootPart
+
+	local camera = workspace.CurrentCamera
+
+	coroutine.wrap(function()
+		while flying do
+			task.wait()
+			local moveDirection = Vector3.zero
+
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+				moveDirection += camera.CFrame.LookVector
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+				moveDirection -= camera.CFrame.LookVector
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+				moveDirection -= camera.CFrame.RightVector
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+				moveDirection += camera.CFrame.RightVector
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+				moveDirection += Vector3.new(0, 1, 0)
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+				moveDirection -= Vector3.new(0, 1, 0)
+			end
+
+			if bodyVelocity then
+				bodyVelocity.Velocity = moveDirection * flySpeed
+			end
+			if bodyGyro then
+				bodyGyro.CFrame = camera.CFrame
+			end
+		end
+	end)()
+
+	print("🟢 Fly Mode ON (Dấu '=')")
+end
+
+--// Dừng bay
+local function stopFlying()
+	flying = false
+	if bodyGyro then bodyGyro:Destroy() end
+	if bodyVelocity then bodyVelocity:Destroy() end
+	print("🔴 Fly Mode OFF")
+end
+
+--// Nhấn "=" CHỈ để bật/tắt Fly
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.Equals then
+		if flying then
+			stopFlying()
+		else
+			startFlying()
+		end
+	end
+end)
+
+--// Khi nhân vật respawn
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoidRootPart = char:WaitForChild("HumanoidRootPart")
+	
+	-- Reset Fly khi chết, nhưng giữ nguyên trạng thái nút Noclip nếu muốn (ở đây reset cho an toàn)
+	flying = false
+	noclip = false
+	NoclipBtn.Text = "Noclip: OFF"
+	NoclipBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+end)
