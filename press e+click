@@ -1,0 +1,31 @@
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local UserInputService = game:GetService("UserInputService")
+
+local holdingE = false
+
+-- Khi nhấn giữ phím E
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.E then
+		holdingE = true
+	end
+end)
+
+-- Khi thả phím E
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.E then
+		holdingE = false
+	end
+end)
+
+-- Khi click chuột trái
+mouse.Button1Down:Connect(function()
+	if holdingE and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+		local hrp = player.Character.HumanoidRootPart
+		local targetPos = mouse.Hit.p
+
+		-- Teleport nhân vật đến vị trí click
+		hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0)) -- +3 để không bị kẹt dưới mặt đất
+	end
+end)
