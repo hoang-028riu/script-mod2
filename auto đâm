@@ -1,0 +1,201 @@
+-- LocalScript: Phi thẳng vào người chơi, có Auto Mode
+-- Đặt trong StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+-- GUI setup
+local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+gui.Name = "KnockGui"
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 300)
+frame.Position = UDim2.new(0, 50, 0, 200)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Active = true
+frame.Draggable = true
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+title.Text = "🚗 Phi Người Chơi"
+title.TextColor3 = Color3.new(1,1,1)
+title.TextScaled = true
+title.Font = Enum.Font.SourceSansBold
+
+-- Dropdown button
+local dropdown = Instance.new("TextButton", frame)
+dropdown.Size = UDim2.new(1, -20, 0, 30)
+dropdown.Position = UDim2.new(0,10,0,40)
+dropdown.Text = "Chọn người chơi ▼"
+dropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+dropdown.TextColor3 = Color3.new(1,1,1)
+dropdown.Font = Enum.Font.SourceSans
+dropdown.TextScaled = true
+
+-- Scroll list
+local listFrame = Instance.new("ScrollingFrame", frame)
+listFrame.Size = UDim2.new(1, -20, 0, 120)
+listFrame.Position = UDim2.new(0,10,0,75)
+listFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+listFrame.Visible = false
+listFrame.CanvasSize = UDim2.new(0,0,0,0)
+listFrame.ScrollBarThickness = 8
+
+local uiList = Instance.new("UIListLayout", listFrame)
+uiList.Padding = UDim.new(0,4)
+uiList.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function refreshList()
+	for _,child in pairs(listFrame:GetChildren()) do
+		if child:IsA("TextButton") then child:Destroy() end
+	end
+	local allBtn = Instance.new("TextButton", listFrame)
+	allBtn.Size = UDim2.new(1,0,0,25)
+	allBtn.Text = "🌀 All Players"
+	allBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+	allBtn.TextColor3 = Color3.new(1,1,1)
+	allBtn.MouseButton1Click:Connect(function()
+		dropdown.Text = "Tất cả người chơi"
+		dropdown:SetAttribute("Target", "All")
+		listFrame.Visible = false
+	end)
+
+	for _,plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local btn = Instance.new("TextButton", listFrame)
+			btn.Size = UDim2.new(1,0,0,25)
+			btn.Text = plr.Name
+			btn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+			btn.TextColor3 = Color3.new(1,1,1)
+			btn.MouseButton1Click:Connect(function()
+				dropdown.Text = "🎯 "..plr.Name
+				dropdown:SetAttribute("Target", plr.Name)
+				listFrame.Visible = false
+			end)
+		end
+	end
+	listFrame.CanvasSize = UDim2.new(0,0,0,uiList.AbsoluteContentSize.Y + 10)
+end
+
+dropdown.MouseButton1Click:Connect(function()
+	listFrame.Visible = not listFrame.Visible
+	if listFrame.Visible then refreshList() end
+end)
+
+-- Speed box
+local speedLabel = Instance.new("TextLabel", frame)
+speedLabel.Size = UDim2.new(1, -20, 0, 25)
+speedLabel.Position = UDim2.new(0,10,0,200)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "Tốc độ:"
+speedLabel.TextColor3 = Color3.new(1,1,1)
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local speedBox = Instance.new("TextBox", frame)
+speedBox.Size = UDim2.new(0, 100, 0, 25)
+speedBox.Position = UDim2.new(0, 100, 0, 200)
+speedBox.Text = "200"
+speedBox.TextColor3 = Color3.new(1,1,1)
+speedBox.BackgroundColor3 = Color3.fromRGB(60,60,60)
+speedBox.ClearTextOnFocus = false
+
+-- Buttons
+local hitBtn = Instance.new("TextButton", frame)
+hitBtn.Size = UDim2.new(1, -20, 0, 35)
+hitBtn.Position = UDim2.new(0,10,0,235)
+hitBtn.Text = "💥 ĐÂM!"
+hitBtn.BackgroundColor3 = Color3.fromRGB(120,0,0)
+hitBtn.TextColor3 = Color3.new(1,1,1)
+hitBtn.Font = Enum.Font.SourceSansBold
+hitBtn.TextScaled = true
+
+local autoBtn = Instance.new("TextButton", frame)
+autoBtn.Size = UDim2.new(1, -20, 0, 35)
+autoBtn.Position = UDim2.new(0,10,0,270)
+autoBtn.Text = "🔁 AUTO: TẮT"
+autoBtn.BackgroundColor3 = Color3.fromRGB(0,100,0)
+autoBtn.TextColor3 = Color3.new(1,1,1)
+autoBtn.Font = Enum.Font.SourceSansBold
+autoBtn.TextScaled = true
+
+-- Chức năng đâm
+local auto = false
+
+local function knockTarget(targetChar, speed)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+	if not targetHRP then return end
+
+	local dir = (targetHRP.Position - hrp.Position).Unit
+	hrp.Velocity = dir * speed
+	task.wait(0.1)
+	targetHRP.Velocity = dir * speed * 1.3 + Vector3.new(0, speed * 0.4, 0)
+end
+
+local function teleportAround(targetHRP)
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local offset = Vector3.new(math.random(-30,30), 0, math.random(-30,30))
+	hrp.CFrame = CFrame.new(targetHRP.Position + offset)
+end
+
+hitBtn.MouseButton1Click:Connect(function()
+	local target = dropdown:GetAttribute("Target")
+	local speed = tonumber(speedBox.Text) or 200
+	if not target then return end
+
+	if target == "All" then
+		for _,plr in pairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer and plr.Character then
+				knockTarget(plr.Character, speed)
+			end
+		end
+	else
+		local targetPlr = Players:FindFirstChild(target)
+		if targetPlr and targetPlr.Character then
+			knockTarget(targetPlr.Character, speed)
+		end
+	end
+end)
+
+autoBtn.MouseButton1Click:Connect(function()
+	auto = not auto
+	autoBtn.Text = auto and "🔁 AUTO: BẬT" or "🔁 AUTO: TẮT"
+	while auto do
+		local target = dropdown:GetAttribute("Target")
+		local speed = tonumber(speedBox.Text) or 200
+		if target and target ~= "All" then
+			local plr = Players:FindFirstChild(target)
+			if plr and plr.Character and LocalPlayer.Character then
+				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					knockTarget(plr.Character, speed)
+					task.wait(0.2)
+					teleportAround(hrp)
+				end
+			end
+		elseif target == "All" then
+			for _,plr in pairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and plr.Character then
+					local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						knockTarget(plr.Character, speed)
+						task.wait(0.1)
+						teleportAround(hrp)
+					end
+				end
+			end
+		end
+		task.wait(0.3)
+	end
+end)
+
+print("✅ Phi người chơi GUI + Auto Mode đã chạy (LocalScript)")
