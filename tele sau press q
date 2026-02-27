@@ -1,0 +1,261 @@
+-- ⚙️ Tele Follow with FOV Circle Filter (Added Team Check Toggle)
+-- Place in StarterPlayerScripts (LocalScript)
+
+local player = game.Players.LocalPlayer
+local uis = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+local Teams = game:GetService("Teams")
+local camera = workspace.CurrentCamera
+
+-- Biến trạng thái Team Check (Mặc định là True - Bật)
+local teamCheckEnabled = true 
+
+-- 🧠 Hàm lấy nhân vật
+local function getChar()
+	local char = player.Character or player.CharacterAdded:Wait()
+	return char, char:WaitForChild("HumanoidRootPart")
+end
+
+-- 🧭 UI setup (menu)
+local gui = Instance.new("ScreenGui")
+gui.Name = "TeleFollowUI_V2"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+-- Tăng chiều cao lên 190 để chứa nút mới
+frame.Size = UDim2.new(0, 220, 0, 190) 
+frame.Position = UDim2.new(0.7, 0, 0.6, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "⚡ Tele Follow Config"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextScaled = true
+
+-- Phím
+local keyLabel = Instance.new("TextLabel", frame)
+keyLabel.Text = "Tele Key:"
+keyLabel.Position = UDim2.new(0, 10, 0, 40)
+keyLabel.Size = UDim2.new(0, 80, 0, 25)
+keyLabel.BackgroundTransparency = 1
+keyLabel.TextColor3 = Color3.new(1,1,1)
+keyLabel.TextScaled = true
+
+local keyBox = Instance.new("TextBox", frame)
+keyBox.Text = "Q"
+keyBox.Position = UDim2.new(0, 110, 0, 40)
+keyBox.Size = UDim2.new(0, 90, 0, 25)
+keyBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+keyBox.TextColor3 = Color3.new(1,1,1)
+keyBox.TextScaled = true
+
+-- Distance
+local distLabel = Instance.new("TextLabel", frame)
+distLabel.Text = "Distance:"
+distLabel.Position = UDim2.new(0, 10, 0, 75)
+distLabel.Size = UDim2.new(0, 80, 0, 25)
+distLabel.BackgroundTransparency = 1
+distLabel.TextColor3 = Color3.new(1,1,1)
+distLabel.TextScaled = true
+
+local distBox = Instance.new("TextBox", frame)
+distBox.Text = "5"
+distBox.Position = UDim2.new(0, 110, 0, 75)
+distBox.Size = UDim2.new(0, 90, 0, 25)
+distBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+distBox.TextColor3 = Color3.new(1,1,1)
+distBox.TextScaled = true
+
+-- FOV radius
+local fovLabel = Instance.new("TextLabel", frame)
+fovLabel.Text = "FOV Radius:"
+fovLabel.Position = UDim2.new(0, 10, 0, 110)
+fovLabel.Size = UDim2.new(0, 80, 0, 25)
+fovLabel.BackgroundTransparency = 1
+fovLabel.TextColor3 = Color3.new(1,1,1)
+fovLabel.TextScaled = true
+
+local fovBox = Instance.new("TextBox", frame)
+fovBox.Text = "150"
+fovBox.Position = UDim2.new(0, 110, 0, 110)
+fovBox.Size = UDim2.new(0, 90, 0, 25)
+fovBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+fovBox.TextColor3 = Color3.new(1,1,1)
+fovBox.TextScaled = true
+
+-- 🔥 Team Check Button (Mới)
+local teamBtn = Instance.new("TextButton", frame)
+teamBtn.Name = "TeamCheckBtn"
+teamBtn.Position = UDim2.new(0, 10, 0, 145)
+teamBtn.Size = UDim2.new(0, 200, 0, 35)
+teamBtn.Font = Enum.Font.SourceSansBold
+teamBtn.TextSize = 18
+teamBtn.TextColor3 = Color3.new(1,1,1)
+-- Hàm cập nhật giao diện nút
+local function updateTeamBtn()
+	if teamCheckEnabled then
+		teamBtn.Text = "Team Check: ON"
+		teamBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Xanh lá
+	else
+		teamBtn.Text = "Team Check: OFF"
+		teamBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Đỏ
+	end
+end
+updateTeamBtn() -- Chạy lần đầu
+
+teamBtn.MouseButton1Click:Connect(function()
+	teamCheckEnabled = not teamCheckEnabled
+	updateTeamBtn()
+end)
+
+-- 🔵 FOV Circle
+local fovGui = Instance.new("ScreenGui")
+fovGui.Name = "FOVCircleUI"
+fovGui.ResetOnSpawn = false
+fovGui.Parent = player.PlayerGui
+
+local circle = Instance.new("Frame", fovGui)
+circle.AnchorPoint = Vector2.new(0.5, 0.5)
+circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+circle.BackgroundTransparency = 1
+circle.Size = UDim2.new(0, tonumber(fovBox.Text)*2, 0, tonumber(fovBox.Text)*2)
+
+local corner = Instance.new("UICorner", circle)
+corner.CornerRadius = UDim.new(1, 0)
+
+local stroke = Instance.new("UIStroke", circle)
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(0, 255, 0)
+stroke.Transparency = 0.25
+
+fovBox.FocusLost:Connect(function()
+	local r = tonumber(fovBox.Text) or 150
+	circle.Size = UDim2.new(0, r*2, 0, r*2)
+end)
+
+-- 🧍‍♂️ Check model có phải nhân vật thật
+local function isCharacterModel(model)
+	if not model or not model:IsA("Model") then return false end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local hrp = model:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return false end
+	local hasBody = model:FindFirstChild("Head") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+	if not hasBody then return false end
+	for _, p in pairs(game.Players:GetPlayers()) do
+		if p.Character == model then return true end
+	end
+	return false
+end
+
+-- 🔍 Tìm trong FOV (Đã cập nhật logic Team Check)
+local function getClosestInFOV()
+	local _, myHRP = getChar()
+	local myTeam = player.Team
+	local closest, closestDist = nil, math.huge
+	local fovRadius = tonumber(fovBox.Text) or 150
+	local screenCenter = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+
+	for _, other in pairs(game.Players:GetPlayers()) do
+		if other ~= player and other.Character and isCharacterModel(other.Character) then
+			
+			-- Logic Team Check mới
+			local canTarget = true
+			if teamCheckEnabled then
+				-- Nếu bật check team và cùng team thì bỏ qua
+				if other.Team == myTeam and myTeam ~= nil then
+					canTarget = false
+				end
+			end
+
+			if canTarget then
+				local hrp = other.Character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+					if onScreen then
+						local diff = Vector2.new(screenPos.X, screenPos.Y) - screenCenter
+						if diff.Magnitude <= fovRadius then
+							local dist = (hrp.Position - myHRP.Position).Magnitude
+							if dist < closestDist then
+								closestDist = dist
+								closest = hrp
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return closest
+end
+
+-- ⚙️ Theo mục tiêu
+local currentTarget = nil
+local autoFollow = false
+local followConn = nil
+
+local function startFollow(target)
+	local _, myHRP = getChar()
+	local offset = tonumber(distBox.Text) or 5
+	autoFollow = true
+	currentTarget = target
+	if followConn then followConn:Disconnect() end
+
+	followConn = runService.RenderStepped:Connect(function()
+		if not autoFollow or not currentTarget or not currentTarget.Parent or not isCharacterModel(currentTarget.Parent) then
+			if followConn then followConn:Disconnect() followConn = nil end
+			return
+		end
+		local offset = tonumber(distBox.Text) or 5
+		local t = currentTarget
+		local backVec = t.CFrame.LookVector * -offset
+		local targetPos = t.Position + backVec
+		
+		-- ⚡ Tele ra sau mục tiêu (Dùng CFrame để mượt hơn)
+		myHRP.CFrame = CFrame.new(targetPos, t.Position)
+		-- 🔁 Xoay người theo hướng mục tiêu
+		myHRP.CFrame = CFrame.new(myHRP.Position, myHRP.Position + t.CFrame.LookVector)
+	end)
+end
+
+-- 🧩 Toggle phím
+uis.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode[keyBox.Text:upper()] then
+		if autoFollow then
+			-- Tắt follow
+			autoFollow = false
+			currentTarget = nil
+			if followConn then followConn:Disconnect() followConn = nil end
+			
+			-- Thông báo tắt
+			game.StarterGui:SetCore("SendNotification", {
+				Title = "Stopped",
+				Text = "Đã dừng Tele Follow",
+				Duration = 1
+			})
+		else
+			-- Bật follow
+			local target = getClosestInFOV()
+			if target then
+				startFollow(target)
+				game.StarterGui:SetCore("SendNotification", {
+					Title = "Locked",
+					Text = "Đang follow: " .. target.Parent.Name,
+					Duration = 2
+				})
+			else
+				game.StarterGui:SetCore("SendNotification", {
+					Title = "❌ No Target",
+					Text = "Không tìm thấy mục tiêu trong FOV!",
+					Duration = 3
+				})
+			end
+		end
+	end
+end)
