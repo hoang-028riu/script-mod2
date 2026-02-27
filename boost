@@ -1,0 +1,79 @@
+-- ⚡ FPS Booster / Client Optimizer (LocalScript)
+-- Giúp Roblox mượt hơn bằng cách tắt hiệu ứng & giảm tải hiển thị trên client
+
+local player = game.Players.LocalPlayer
+local lighting = game:GetService("Lighting")
+local workspace = game:GetService("Workspace")
+local runService = game:GetService("RunService")
+
+-- 💨 Tối ưu Lighting (ánh sáng)
+for _, obj in pairs(lighting:GetChildren()) do
+	if obj:IsA("PostEffect") or obj:IsA("BloomEffect") or obj:IsA("SunRaysEffect") or obj:IsA("DepthOfFieldEffect") or obj:IsA("ColorCorrectionEffect") then
+		obj.Enabled = false
+	end
+end
+lighting.GlobalShadows = false
+lighting.FogEnd = 1e5
+lighting.EnvironmentDiffuseScale = 0
+lighting.EnvironmentSpecularScale = 0
+
+-- 💨 Giảm chất lượng vật lý hiển thị
+workspace.StreamingEnabled = true
+workspace.StreamingMinRadius = 32
+workspace.StreamingTargetRadius = 64
+workspace.Terrain.WaterWaveSize = 0
+workspace.Terrain.WaterReflectance = 0
+workspace.Terrain.WaterTransparency = 1
+
+-- 💨 Ẩn chi tiết không cần thiết
+for _, d in pairs(workspace:GetDescendants()) do
+	if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Smoke") or d:IsA("Fire") then
+		d.Enabled = false
+	elseif d:IsA("Decal") or d:IsA("Texture") then
+		d.Transparency = 1
+	end
+end
+
+-- 💨 Giảm tần suất update vật lý
+settings().Physics.AllowSleep = true
+settings().Physics.ThrottleAdjustTime = 10
+
+-- 💨 Tắt camera shake / effects (nếu có)
+local camera = workspace.CurrentCamera
+if camera then
+	camera.FieldOfView = 70
+end
+
+-- 💨 Cập nhật FPS display (tùy chọn)
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "FPSCounter"
+
+local text = Instance.new("TextLabel", gui)
+text.Size = UDim2.new(0, 120, 0, 25)
+text.Position = UDim2.new(0, 10, 0, 10)
+text.BackgroundTransparency = 0.3
+text.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+text.TextColor3 = Color3.fromRGB(0, 255, 0)
+text.TextScaled = true
+text.Text = "FPS: --"
+
+-- FPS counter
+local frames = 0
+local lastTime = tick()
+runService.RenderStepped:Connect(function()
+	frames += 1
+	if tick() - lastTime >= 1 then
+		text.Text = "FPS: " .. tostring(frames)
+		frames = 0
+		lastTime = tick()
+	end
+end)
+
+-- 💨 Dọn định kỳ để giảm lag (xóa debris hoặc parts lỗi)
+while task.wait(10) do
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("Explosion") or obj:IsA("Sparkles") then
+			obj:Destroy()
+		end
+	end
+end
