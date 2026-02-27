@@ -1,0 +1,428 @@
+--[[
+    VISUALS & ESP GUI - Extracted & Remade from Infinite Yield
+    Features: ESP (Box, Name, Chams, Tracers), Xray, Fullbright, Spectate, Freecam
+    Created by Gemini
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- // CẤU HÌNH & TRẠNG THÁI //
+local Settings = {
+    ESP_Enabled = false,
+    Box_Enabled = false,
+    Name_Enabled = false,
+    Chams_Enabled = false,
+    Tracers_Enabled = false,
+    Xray_Enabled = false,
+    Fullbright_Enabled = false,
+    Freecam_Enabled = false
+}
+
+local ESP_Storage = {} -- Lưu trữ các object ESP
+local OriginalSettings = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd
+}
+
+-- // GUI SETUP //
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local ScrollFrame = Instance.new("ScrollingFrame")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "VisualsGui"
+ScreenGui.Parent = game:GetService("CoreGui") -- Dùng CoreGui để ẩn khỏi game (nếu executor hỗ trợ)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+ScreenGui.ResetOnSpawn = false
+
+-- Main Frame
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
+MainFrame.Size = UDim2.new(0, 300, 0, 350)
+MainFrame.Active = true
+MainFrame.Draggable = true
+UICorner.Parent = MainFrame
+
+-- Title
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "VISUALS & ESP"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+
+-- Scroll Frame (Chứa các nút)
+ScrollFrame.Parent = MainFrame
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
+ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
+ScrollFrame.ScrollBarThickness = 4
+
+-- Layout List
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = ScrollFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 5)
+
+-- // HÀM TẠO NÚT (Helper) //
+local function CreateButton(text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Parent = ScrollFrame
+    btn.Size = UDim2.new(1, 0, 0, 35)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        local isOn = callback()
+        if isOn then
+            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255) -- Màu xanh khi bật
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- Màu xám khi tắt
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end)
+    return btn
+end
+
+local function CreateSection(text)
+    local label = Instance.new("TextLabel")
+    label.Parent = ScrollFrame
+    label.Size = UDim2.new(1, 0, 0, 25)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(255, 255, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+-- // CHỨC NĂNG ESP (CORE) //
+
+-- Xóa ESP cũ của 1 player
+local function ClearESP(player)
+    if ESP_Storage[player] then
+        for _, obj in pairs(ESP_Storage[player]) do
+            if obj.Remove then obj:Remove() else obj:Destroy() end
+        end
+        ESP_Storage[player] = nil
+    end
+end
+
+-- Tạo ESP cho 1 player
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local storage = {
+        Box = nil,
+        Name = nil,
+        Highlight = nil,
+        Tracer = nil
+    }
+    
+    -- 1. Highlight (Chams)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPHighlight"
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = Settings.Chams_Enabled
+    storage.Highlight = highlight
+
+    -- 2. BillboardGui (Name & Box)
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "ESP_Billboard"
+    bb.Adornee = nil
+    bb.AlwaysOnTop = true
+    bb.Size = UDim2.new(4, 0, 5, 0)
+    bb.StudsOffset = Vector3.new(0, 0, 0)
+    
+    local boxFrame = Instance.new("Frame")
+    boxFrame.Size = UDim2.new(1, 0, 1, 0)
+    boxFrame.BackgroundTransparency = 1
+    boxFrame.BorderColor3 = Color3.new(1, 0, 0)
+    boxFrame.BorderSizePixel = 2
+    boxFrame.Visible = Settings.Box_Enabled
+    boxFrame.Parent = bb
+    storage.Box = boxFrame
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0, 20)
+    nameLabel.Position = UDim2.new(0, 0, -0.2, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name
+    nameLabel.TextColor3 = Color3.new(1, 1, 1)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.Visible = Settings.Name_Enabled
+    nameLabel.Parent = bb
+    storage.Name = nameLabel
+    
+    -- 3. Tracer (Drawing API) - Chỉ hoạt động nếu executor hỗ trợ Drawing
+    local tracerLine
+    if Drawing then
+        tracerLine = Drawing.new("Line")
+        tracerLine.Visible = false
+        tracerLine.Color = Color3.new(1, 0, 0)
+        tracerLine.Thickness = 1.5
+        tracerLine.Transparency = 1
+        storage.Tracer = tracerLine
+    end
+    
+    ESP_Storage[player] = storage
+
+    -- Loop Update cho từng Player
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
+            if bb.Parent then bb.Parent = nil end
+            if highlight.Parent then highlight.Parent = nil end
+            if tracerLine then tracerLine.Visible = false end
+            return 
+        end
+        
+        local char = player.Character
+        local hrp = char.HumanoidRootPart
+        
+        -- Update Chams
+        if Settings.Chams_Enabled then
+            if highlight.Parent ~= char then highlight.Parent = char end
+            highlight.Enabled = true
+        else
+            highlight.Enabled = false
+        end
+        
+        -- Update Box/Name
+        if Settings.Box_Enabled or Settings.Name_Enabled then
+            if bb.Parent ~= char then bb.Parent = char end
+            boxFrame.Visible = Settings.Box_Enabled
+            nameLabel.Visible = Settings.Name_Enabled
+        else
+            bb.Parent = nil
+        end
+        
+        -- Update Tracers
+        if tracerLine then
+            if Settings.Tracers_Enabled then
+                local vec, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y) -- Từ dưới màn hình
+                    tracerLine.To = Vector2.new(vec.X, vec.Y)
+                    tracerLine.Visible = true
+                else
+                    tracerLine.Visible = false
+                end
+            else
+                tracerLine.Visible = false
+            end
+        end
+        
+        if not player.Parent then 
+            ClearESP(player)
+            connection:Disconnect()
+        end
+    end)
+end
+
+-- Refresh toàn bộ ESP
+local function RefreshESP()
+    for _, plr in pairs(Players:GetPlayers()) do
+        ClearESP(plr)
+        CreateESP(plr)
+    end
+end
+
+Players.PlayerAdded:Connect(CreateESP)
+Players.PlayerRemoving:Connect(ClearESP)
+
+-- // CÁC HÀM TOGGLE //
+
+CreateSection("VISUALS")
+
+-- 1. Box ESP
+CreateButton("Box ESP", function()
+    Settings.Box_Enabled = not Settings.Box_Enabled
+    return Settings.Box_Enabled
+end)
+
+-- 2. Name ESP
+CreateButton("Name Tags", function()
+    Settings.Name_Enabled = not Settings.Name_Enabled
+    return Settings.Name_Enabled
+end)
+
+-- 3. Chams
+CreateButton("Chams (Highlight)", function()
+    Settings.Chams_Enabled = not Settings.Chams_Enabled
+    return Settings.Chams_Enabled
+end)
+
+-- 4. Tracers
+CreateButton("Tracers", function()
+    Settings.Tracers_Enabled = not Settings.Tracers_Enabled
+    return Settings.Tracers_Enabled
+end)
+
+CreateSection("WORLD")
+
+-- 5. Xray
+CreateButton("Xray (WallHack)", function()
+    Settings.Xray_Enabled = not Settings.Xray_Enabled
+    if Settings.Xray_Enabled then
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
+                v.Transparency = 0.5
+            end
+        end
+    else
+        -- Reset đơn giản (không hoàn hảo nhưng đỡ lag)
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
+                v.Transparency = 0
+            end
+        end
+    end
+    return Settings.Xray_Enabled
+end)
+
+-- 6. Fullbright
+CreateButton("Fullbright", function()
+    Settings.Fullbright_Enabled = not Settings.Fullbright_Enabled
+    if Settings.Fullbright_Enabled then
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 12
+        Lighting.FogEnd = 100000
+    else
+        Lighting.Ambient = OriginalSettings.Ambient
+        Lighting.OutdoorAmbient = OriginalSettings.OutdoorAmbient
+        Lighting.Brightness = OriginalSettings.Brightness
+        Lighting.ClockTime = OriginalSettings.ClockTime
+        Lighting.FogEnd = OriginalSettings.FogEnd
+    end
+    return Settings.Fullbright_Enabled
+end)
+
+-- // SPECTATE SYSTEM //
+
+CreateSection("SPECTATE")
+
+local SpectateFrame = Instance.new("Frame")
+SpectateFrame.Parent = ScrollFrame
+SpectateFrame.Size = UDim2.new(1, 0, 0, 40)
+SpectateFrame.BackgroundTransparency = 1
+
+local NameInput = Instance.new("TextBox")
+NameInput.Parent = SpectateFrame
+NameInput.Size = UDim2.new(0.6, -5, 1, 0)
+NameInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+NameInput.TextColor3 = Color3.new(1, 1, 1)
+NameInput.PlaceholderText = "Enter Name..."
+NameInput.Font = Enum.Font.Gotham
+NameInput.TextSize = 14
+local CornerInput = Instance.new("UICorner"); CornerInput.Parent = NameInput
+
+local ViewBtn = Instance.new("TextButton")
+ViewBtn.Parent = SpectateFrame
+ViewBtn.Size = UDim2.new(0.2, -5, 1, 0)
+ViewBtn.Position = UDim2.new(0.6, 0, 0, 0)
+ViewBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+ViewBtn.Text = "View"
+ViewBtn.TextColor3 = Color3.new(1, 1, 1)
+local CornerView = Instance.new("UICorner"); CornerView.Parent = ViewBtn
+
+local UnviewBtn = Instance.new("TextButton")
+UnviewBtn.Parent = SpectateFrame
+UnviewBtn.Size = UDim2.new(0.2, 0, 1, 0)
+UnviewBtn.Position = UDim2.new(0.8, 0, 0, 0)
+UnviewBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+UnviewBtn.Text = "Reset"
+UnviewBtn.TextColor3 = Color3.new(1, 1, 1)
+local CornerUnview = Instance.new("UICorner"); CornerUnview.Parent = UnviewBtn
+
+-- Logic tìm tên người chơi
+local function GetPlayer(name)
+    name = name:lower()
+    for _, v in pairs(Players:GetPlayers()) do
+        if v.Name:lower():sub(1, #name) == name or v.DisplayName:lower():sub(1, #name) == name then
+            return v
+        end
+    end
+    return nil
+end
+
+ViewBtn.MouseButton1Click:Connect(function()
+    local target = GetPlayer(NameInput.Text)
+    if target and target.Character then
+        Camera.CameraSubject = target.Character:FindFirstChild("Humanoid")
+        NameInput.Text = target.Name -- Auto complete tên
+    end
+end)
+
+UnviewBtn.MouseButton1Click:Connect(function()
+    if LocalPlayer.Character then
+        Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+    end
+end)
+
+-- // FREECAM (SIMPLE) //
+CreateSection("TOOLS")
+
+local isFreecam = false
+local freecamConn = nil
+local speed = 1
+
+CreateButton("Freecam (PC/Mobile)", function()
+    isFreecam = not isFreecam
+    Settings.Freecam_Enabled = isFreecam
+    
+    if isFreecam then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        freecamConn = RunService.RenderStepped:Connect(function(dt)
+            -- Logic Freecam đơn giản (WASD + QE)
+            -- Lưu ý: Đây là logic cơ bản, trên Mobile sẽ cần dùng nút ảo để di chuyển camera
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, -speed) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, speed) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then Camera.CFrame = Camera.CFrame * CFrame.new(-speed, 0, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then Camera.CFrame = Camera.CFrame * CFrame.new(speed, 0, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then Camera.CFrame = Camera.CFrame * CFrame.new(0, speed, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then Camera.CFrame = Camera.CFrame * CFrame.new(0, -speed, 0) end
+        end)
+    else
+        if freecamConn then freecamConn:Disconnect() end
+        Camera.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character then
+            Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+        end
+    end
+    return isFreecam
+end)
+
+
+-- Init
+RefreshESP()
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Visuals GUI";
+    Text = "Loaded! Enjoy ESP & Visuals.";
+    Duration = 5;
+})
