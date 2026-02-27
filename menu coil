@@ -1,0 +1,493 @@
+local player = game.Players.LocalPlayer
+local uis = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+
+-- Xoá GUI cũ nếu có
+local oldGui = game.CoreGui:FindFirstChild("CoilConfigGUI") or player.PlayerGui:FindFirstChild("CoilConfigGUI")
+if oldGui then oldGui:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "CoilConfigGUI"
+gui.ResetOnSpawn = false
+
+local success = pcall(function()
+    gui.Parent = game:GetService("CoreGui")
+end)
+if not success then
+    gui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- ==========================================
+-- 1. KHUNG MENU SPAWN COIL (Bên phải màn hình)
+-- ==========================================
+local spawnToggleBtn = Instance.new("TextButton")
+spawnToggleBtn.Size = UDim2.new(0, 160, 0, 35)
+spawnToggleBtn.Position = UDim2.new(1, -15, 0.5, -180) 
+spawnToggleBtn.AnchorPoint = Vector2.new(1, 1) -- Neo góc dưới phải để sát với menu
+spawnToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+spawnToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+spawnToggleBtn.Font = Enum.Font.GothamBold
+spawnToggleBtn.TextSize = 14
+spawnToggleBtn.Text = "Mở Menu Coil"
+spawnToggleBtn.Parent = gui
+Instance.new("UICorner", spawnToggleBtn).CornerRadius = UDim.new(0, 8)
+
+local spawnFrame = Instance.new("Frame")
+spawnFrame.Size = UDim2.new(0, 160, 0, 360)
+spawnFrame.Position = UDim2.new(1, -15, 0.5, -175) 
+spawnFrame.AnchorPoint = Vector2.new(1, 0) -- Neo góc trên phải
+spawnFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+spawnFrame.BackgroundTransparency = 0.15
+spawnFrame.Visible = false -- Ẩn đi mặc định
+spawnFrame.Parent = gui
+Instance.new("UICorner", spawnFrame).CornerRadius = UDim.new(0, 10)
+
+local spawnTitle = Instance.new("TextLabel")
+spawnTitle.Size = UDim2.new(1, 0, 0, 30)
+spawnTitle.BackgroundTransparency = 1
+spawnTitle.Text = "CHỌN COIL"
+spawnTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+spawnTitle.Font = Enum.Font.GothamBold
+spawnTitle.TextSize = 14
+spawnTitle.Parent = spawnFrame
+
+local spawnScroll = Instance.new("ScrollingFrame")
+spawnScroll.Size = UDim2.new(1, -10, 1, -40)
+spawnScroll.Position = UDim2.new(0, 5, 0, 35)
+spawnScroll.BackgroundTransparency = 1
+spawnScroll.ScrollBarThickness = 4
+spawnScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+spawnScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+spawnScroll.Parent = spawnFrame
+
+local spawnListLayout = Instance.new("UIListLayout", spawnScroll)
+spawnListLayout.Padding = UDim.new(0, 6)
+spawnListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+spawnListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+spawnToggleBtn.MouseButton1Click:Connect(function()
+    spawnFrame.Visible = not spawnFrame.Visible
+    if spawnFrame.Visible then
+        spawnToggleBtn.Text = "Đóng Menu"
+        spawnToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    else
+        spawnToggleBtn.Text = "Mở Menu Coil"
+        spawnToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+    end
+end)
+
+local function addSpawnButton(name, color, order, spawnFunc)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 35)
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Text = name
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 12
+    btn.LayoutOrder = order
+    btn.Parent = spawnScroll
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Thickness = 1.5
+    stroke.Color = Color3.fromRGB(0, 0, 0)
+    stroke.Transparency = 0.3
+
+    btn.MouseButton1Click:Connect(function()
+        spawnFunc()
+    end)
+end
+
+
+-- ==========================================
+-- 2. KHUNG CẤU HÌNH COIL (Góc dưới bên trái)
+-- ==========================================
+local configFrame = Instance.new("Frame")
+configFrame.Size = UDim2.new(0, 250, 0, 0)
+configFrame.Position = UDim2.new(0, 20, 1, -20)
+configFrame.AnchorPoint = Vector2.new(0, 1)
+configFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+configFrame.BackgroundTransparency = 0.1
+configFrame.Visible = false
+configFrame.AutomaticSize = Enum.AutomaticSize.Y
+configFrame.Parent = gui
+
+Instance.new("UICorner", configFrame).CornerRadius = UDim.new(0, 10)
+local uiPadding = Instance.new("UIPadding", configFrame)
+uiPadding.PaddingTop = UDim.new(0, 10); uiPadding.PaddingBottom = UDim.new(0, 10)
+uiPadding.PaddingLeft = UDim.new(0, 10); uiPadding.PaddingRight = UDim.new(0, 10)
+
+local uiListLayout = Instance.new("UIListLayout", configFrame)
+uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uiListLayout.Padding = UDim.new(0, 10)
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, 0, 0, 25)
+titleLbl.BackgroundTransparency = 1
+titleLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+titleLbl.TextSize = 16
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.LayoutOrder = 1
+titleLbl.Parent = configFrame
+
+local sliderContainer = Instance.new("Frame")
+sliderContainer.Size = UDim2.new(1, 0, 0, 0)
+sliderContainer.BackgroundTransparency = 1
+sliderContainer.AutomaticSize = Enum.AutomaticSize.Y
+sliderContainer.LayoutOrder = 2
+sliderContainer.Parent = configFrame
+
+local sliderListLayout = Instance.new("UIListLayout", sliderContainer)
+sliderListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sliderListLayout.Padding = UDim.new(0, 8)
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(1, 0, 0, 35)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+refreshBtn.Text = "Refresh (Áp dụng)"
+refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshBtn.Font = Enum.Font.GothamSemibold
+refreshBtn.TextSize = 14
+refreshBtn.LayoutOrder = 3
+refreshBtn.Parent = configFrame
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
+
+-- Hệ thống thanh kéo (Slider)
+local activeSliders = {}
+local function createSlider(labelText, minVal, maxVal, defaultVal, isFloat)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundTransparency = 1
+    frame.Parent = sliderContainer
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 15)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = frame
+
+    local bg = Instance.new("TextButton")
+    bg.Size = UDim2.new(1, 0, 0, 15)
+    bg.Position = UDim2.new(0, 0, 0, 20)
+    bg.Text = ""
+    bg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    bg.AutoButtonColor = false
+    bg.Parent = frame
+    Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 5)
+
+    local fill = Instance.new("Frame")
+    local initialPct = (defaultVal - minVal) / (maxVal - minVal)
+    fill.Size = UDim2.new(initialPct, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    fill.Parent = bg
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 5)
+
+    local val = defaultVal
+    local isDragging = false
+
+    local function updateText()
+        if isFloat then lbl.Text = labelText .. ": " .. string.format("%.2f", val) else lbl.Text = labelText .. ": " .. math.floor(val) end
+    end
+    updateText()
+
+    local function updateSlider(input)
+        local relativeX = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+        fill.Size = UDim2.new(relativeX, 0, 1, 0)
+        val = minVal + (maxVal - minVal) * relativeX
+        if not isFloat then val = math.floor(val) else val = math.floor(val * 100) / 100 end
+        updateText()
+    end
+
+    bg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDragging = true; updateSlider(input) end
+    end)
+    uis.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDragging = false end
+    end)
+    uis.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then updateSlider(input) end
+    end)
+
+    return function() return val end
+end
+
+local currentRefreshCallback = nil
+
+local function showConfigUI(toolName, slidersConfig, applyCallback)
+    for _, child in pairs(sliderContainer:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    activeSliders = {}
+    titleLbl.Text = toolName
+    for _, cfg in ipairs(slidersConfig) do
+        local getValueFunc = createSlider(cfg.name, cfg.min, cfg.max, cfg.default, cfg.isFloat)
+        activeSliders[cfg.id] = getValueFunc
+    end
+    currentRefreshCallback = applyCallback
+    configFrame.Visible = true
+end
+
+local function hideConfigUI()
+    configFrame.Visible = false
+    currentRefreshCallback = nil
+end
+
+refreshBtn.MouseButton1Click:Connect(function()
+    if currentRefreshCallback then
+        local values = {}
+        for id, getFunc in pairs(activeSliders) do values[id] = getFunc() end
+        currentRefreshCallback(values)
+    end
+end)
+
+-- ==========================================
+-- 3. HỆ THỐNG TẠO TOOLS & SPAWN
+-- ==========================================
+local function applyMesh(handle)
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = "rbxassetid://16606212"
+    mesh.Scale = Vector3.new(1, 1, 1)
+    mesh.Parent = handle
+end
+
+-- 1. Speed Coil
+local speedVal = 40
+local function spawnSpeedCoil()
+    local t1 = Instance.new("Tool"); t1.Name = "1. Speed Coil"; t1.RequiresHandle = true
+    local h1 = Instance.new("Part"); h1.Name = "Handle"; h1.Size = Vector3.new(0.5, 0.5, 0.5); h1.Color = Color3.fromRGB(0, 150, 255); h1.Parent = t1; applyMesh(h1)
+    local function applySpeed(val)
+        if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.WalkSpeed = val end
+    end
+    t1.Equipped:Connect(function()
+        applySpeed(speedVal)
+        showConfigUI("Cấu Hình: Speed Coil", { {id = "speed", name = "Tốc Độ Chạy", min = 16, max = 250, default = speedVal, isFloat = false} }, 
+        function(vals) speedVal = vals.speed; applySpeed(speedVal) end)
+    end)
+    t1.Unequipped:Connect(function() hideConfigUI(); applySpeed(16) end)
+    t1.Parent = player.Backpack
+end
+
+-- 2. Gravity Coil
+local gravJumpVal, gravLiftVal = 100, 0.6
+local gravForce
+local function spawnGravityCoil()
+    local t2 = Instance.new("Tool"); t2.Name = "2. Gravity Coil"; t2.RequiresHandle = true
+    local h2 = Instance.new("Part"); h2.Name = "Handle"; h2.Size = Vector3.new(0.5, 0.5, 0.5); h2.Color = Color3.fromRGB(50, 205, 50); h2.Parent = t2; applyMesh(h2)
+    local function applyGravity(jump, lift)
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.UseJumpPower = true; char.Humanoid.JumpPower = jump
+            if gravForce then gravForce:Destroy() end
+            if lift > 0 then
+                gravForce = Instance.new("BodyForce")
+                local totalMass = 0
+                for _, p in pairs(char:GetChildren()) do if p:IsA("BasePart") then totalMass = totalMass + p:GetMass() end end
+                gravForce.Force = Vector3.new(0, totalMass * workspace.Gravity * lift, 0)
+                gravForce.Parent = char:WaitForChild("HumanoidRootPart")
+            end
+        end
+    end
+    t2.Equipped:Connect(function()
+        applyGravity(gravJumpVal, gravLiftVal)
+        showConfigUI("Cấu Hình: Gravity Coil", {
+            {id = "jump", name = "Lực Nhảy", min = 50, max = 300, default = gravJumpVal, isFloat = false},
+            {id = "lift", name = "Lực Rơi Chậm", min = 0, max = 1.2, default = gravLiftVal, isFloat = true}
+        }, function(vals) gravJumpVal = vals.jump; gravLiftVal = vals.lift; applyGravity(gravJumpVal, gravLiftVal) end)
+    end)
+    t2.Unequipped:Connect(function() hideConfigUI(); applyGravity(50, 0) end)
+    t2.Parent = player.Backpack
+end
+
+-- 3. Jump Coil
+local jumpVal = 100
+local function spawnJumpCoil()
+    local t3 = Instance.new("Tool"); t3.Name = "3. Jump Coil"; t3.RequiresHandle = true
+    local h3 = Instance.new("Part"); h3.Name = "Handle"; h3.Size = Vector3.new(0.5, 0.5, 0.5); h3.Color = Color3.fromRGB(255, 165, 0); h3.Parent = t3; applyMesh(h3)
+    local function applyJump(val)
+        if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.UseJumpPower = true; player.Character.Humanoid.JumpPower = val end
+    end
+    t3.Equipped:Connect(function()
+        applyJump(jumpVal)
+        showConfigUI("Cấu Hình: Jump Coil", { {id = "jump", name = "Lực Nhảy", min = 50, max = 300, default = jumpVal, isFloat = false} }, 
+        function(vals) jumpVal = vals.jump; applyJump(jumpVal) end)
+    end)
+    t3.Unequipped:Connect(function() hideConfigUI(); applyJump(50) end)
+    t3.Parent = player.Backpack
+end
+
+-- 4. Health Coil
+local healAmount = 5
+local function spawnHealthCoil()
+    local t4 = Instance.new("Tool"); t4.Name = "4. Health Coil"; t4.RequiresHandle = true
+    local h4 = Instance.new("Part"); h4.Name = "Handle"; h4.Size = Vector3.new(0.5, 0.5, 0.5); h4.Color = Color3.fromRGB(255, 50, 50); h4.Parent = t4; applyMesh(h4)
+    local isHealing = false
+    t4.Equipped:Connect(function()
+        isHealing = true
+        task.spawn(function()
+            while isHealing and player.Character do
+                local hum = player.Character:FindFirstChild("Humanoid")
+                if hum and hum.Health < hum.MaxHealth and hum.Health > 0 then hum.Health = math.min(hum.Health + healAmount, hum.MaxHealth) end
+                task.wait(1)
+            end
+        end)
+        showConfigUI("Cấu Hình: Health Coil", { {id = "heal", name = "Máu hồi mỗi giây", min = 1, max = 50, default = healAmount, isFloat = false} }, 
+        function(vals) healAmount = vals.heal end)
+    end)
+    t4.Unequipped:Connect(function() hideConfigUI(); isHealing = false end)
+    t4.Parent = player.Backpack
+end
+
+-- 5. Fusion Coil
+local fusionSpeed, fusionJump, fusionLift = 40, 100, 0.6
+local fusionForce
+local function spawnFusionCoil()
+    local t5 = Instance.new("Tool"); t5.Name = "5. Fusion Coil"; t5.RequiresHandle = true
+    local h5 = Instance.new("Part"); h5.Name = "Handle"; h5.Size = Vector3.new(0.5, 0.5, 0.5); h5.Color = Color3.fromRGB(138, 43, 226); h5.Parent = t5; applyMesh(h5)
+    local function applyFusion(spd, jmp, lift)
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = spd
+            char.Humanoid.UseJumpPower = true; char.Humanoid.JumpPower = jmp
+            if fusionForce then fusionForce:Destroy() end
+            if lift > 0 then
+                fusionForce = Instance.new("BodyForce")
+                local totalMass = 0
+                for _, p in pairs(char:GetChildren()) do if p:IsA("BasePart") then totalMass = totalMass + p:GetMass() end end
+                fusionForce.Force = Vector3.new(0, totalMass * workspace.Gravity * lift, 0)
+                fusionForce.Parent = char:WaitForChild("HumanoidRootPart")
+            end
+        end
+    end
+    t5.Equipped:Connect(function()
+        applyFusion(fusionSpeed, fusionJump, fusionLift)
+        showConfigUI("Cấu Hình: Fusion Coil", {
+            {id = "speed", name = "Tốc Độ", min = 16, max = 250, default = fusionSpeed, isFloat = false},
+            {id = "jump", name = "Lực Nhảy", min = 50, max = 300, default = fusionJump, isFloat = false},
+            {id = "lift", name = "Lực Rơi Chậm", min = 0, max = 1.2, default = fusionLift, isFloat = true}
+        }, function(vals) fusionSpeed = vals.speed; fusionJump = vals.jump; fusionLift = vals.lift; applyFusion(fusionSpeed, fusionJump, fusionLift) end)
+    end)
+    t5.Unequipped:Connect(function() hideConfigUI(); applyFusion(16, 50, 0) end)
+    t5.Parent = player.Backpack
+end
+
+-- 6. Ghost Coil (Không cần config)
+local function spawnGhostCoil()
+    local t6 = Instance.new("Tool"); t6.Name = "6. Ghost Coil"; t6.RequiresHandle = true
+    local h6 = Instance.new("Part"); h6.Name = "Handle"; h6.Size = Vector3.new(0.5, 0.5, 0.5); h6.Color = Color3.fromRGB(200, 200, 200); h6.Transparency = 0.5; h6.Parent = t6; applyMesh(h6)
+    local ghostConn
+    t6.Equipped:Connect(function()
+        hideConfigUI()
+        for _, p in pairs(player.Character:GetChildren()) do if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then p.Transparency = 0.5 end end
+        ghostConn = runService.Stepped:Connect(function()
+            for _, p in pairs(player.Character:GetChildren()) do if p:IsA("BasePart") then p.CanCollide = false end end
+        end)
+    end)
+    t6.Unequipped:Connect(function()
+        if ghostConn then ghostConn:Disconnect() end
+        if player.Character then
+            for _, p in pairs(player.Character:GetChildren()) do if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then p.Transparency = 0; p.CanCollide = true end end
+        end
+    end)
+    t6.Parent = player.Backpack
+end
+
+-- 7. Fire Coil (Không cần config)
+local function spawnFireCoil()
+    local t7 = Instance.new("Tool"); t7.Name = "7. Fire Coil"; t7.RequiresHandle = true
+    local h7 = Instance.new("Part"); h7.Name = "Handle"; h7.Size = Vector3.new(0.5, 0.5, 0.5); h7.Color = Color3.fromRGB(255, 69, 0); h7.Parent = t7; applyMesh(h7)
+    Instance.new("Fire", h7)
+    t7.Equipped:Connect(function() hideConfigUI() end)
+    t7.Parent = player.Backpack
+end
+
+-- 8. Ice Coil (Không cần config)
+local function spawnIceCoil()
+    local t8 = Instance.new("Tool"); t8.Name = "8. Ice Coil"; t8.RequiresHandle = true
+    local h8 = Instance.new("Part"); h8.Name = "Handle"; h8.Size = Vector3.new(0.5, 0.5, 0.5); h8.Color = Color3.fromRGB(0, 255, 255); h8.Parent = t8; applyMesh(h8)
+    local sparkles = Instance.new("Sparkles", h8); sparkles.SparkleColor = Color3.fromRGB(0, 255, 255)
+    t8.Equipped:Connect(function() hideConfigUI() end)
+    t8.Parent = player.Backpack
+end
+
+-- 9. Fly Coil
+local flySpeed = 50
+local function spawnFlyCoil()
+    local t9 = Instance.new("Tool"); t9.Name = "9. Fly Coil"; t9.RequiresHandle = true
+    local h9 = Instance.new("Part"); h9.Name = "Handle"; h9.Size = Vector3.new(0.5, 0.5, 0.5); h9.Color = Color3.fromRGB(255, 215, 0); h9.Parent = t9; applyMesh(h9)
+    local flyConn, bv, bg
+    local function setupFly()
+        local char = player.Character; if not char then return end
+        local root = char:WaitForChild("HumanoidRootPart")
+        if not bv then
+            bv = Instance.new("BodyVelocity", root); bv.MaxForce = Vector3.new(100000, 100000, 100000); bv.Velocity = Vector3.zero
+            bg = Instance.new("BodyGyro", root); bg.MaxTorque = Vector3.new(100000, 100000, 100000); bg.D = 50
+        end
+        char.Humanoid.PlatformStand = true
+        if flyConn then flyConn:Disconnect() end
+        flyConn = runService.RenderStepped:Connect(function()
+            local cam = workspace.CurrentCamera
+            bg.CFrame = cam.CFrame
+            local moveDir = Vector3.zero
+            if uis:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+            if uis:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+            if uis:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+            if uis:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+            if moveDir.Magnitude > 0 then bv.Velocity = moveDir.Unit * flySpeed else bv.Velocity = Vector3.zero end
+        end)
+    end
+    t9.Equipped:Connect(function()
+        setupFly()
+        showConfigUI("Cấu Hình: Fly Coil", { {id = "fly", name = "Tốc Độ Bay", min = 10, max = 300, default = flySpeed, isFloat = false} }, 
+        function(vals) flySpeed = vals.fly end)
+    end)
+    t9.Unequipped:Connect(function()
+        hideConfigUI()
+        if flyConn then flyConn:Disconnect() end
+        if bv then bv:Destroy(); bv = nil end
+        if bg then bg:Destroy(); bg = nil end
+        if player.Character then player.Character.Humanoid.PlatformStand = false end
+    end)
+    t9.Parent = player.Backpack
+end
+
+-- 10. Admin Coil (Max sức mạnh, không cần config)
+local function spawnAdminCoil()
+    local t10 = Instance.new("Tool"); t10.Name = "10. Admin Coil"; t10.RequiresHandle = true
+    local h10 = Instance.new("Part"); h10.Name = "Handle"; h10.Size = Vector3.new(0.5, 0.5, 0.5); h10.Color = Color3.fromRGB(255, 255, 255); h10.Material = Enum.Material.Neon; h10.Parent = t10; applyMesh(h10)
+    local ff
+    t10.Equipped:Connect(function()
+        hideConfigUI()
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = 150
+            char.Humanoid.UseJumpPower = true; char.Humanoid.JumpPower = 200
+            if not char:FindFirstChildOfClass("ForceField") then ff = Instance.new("ForceField", char) end
+        end
+    end)
+    t10.Unequipped:Connect(function()
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = 16
+            char.Humanoid.JumpPower = 50
+        end
+        if ff then ff:Destroy(); ff = nil end
+    end)
+    t10.Parent = player.Backpack
+end
+
+-- Thêm các nút Spawn vào danh sách
+addSpawnButton("1. Speed Coil", Color3.fromRGB(0, 150, 255), 1, spawnSpeedCoil)
+addSpawnButton("2. Gravity Coil", Color3.fromRGB(50, 205, 50), 2, spawnGravityCoil)
+addSpawnButton("3. Jump Coil", Color3.fromRGB(255, 165, 0), 3, spawnJumpCoil)
+addSpawnButton("4. Health Coil", Color3.fromRGB(255, 50, 50), 4, spawnHealthCoil)
+addSpawnButton("5. Fusion Coil", Color3.fromRGB(138, 43, 226), 5, spawnFusionCoil)
+addSpawnButton("6. Ghost Coil", Color3.fromRGB(200, 200, 200), 6, spawnGhostCoil)
+addSpawnButton("7. Fire Coil", Color3.fromRGB(255, 69, 0), 7, spawnFireCoil)
+addSpawnButton("8. Ice Coil", Color3.fromRGB(0, 255, 255), 8, spawnIceCoil)
+addSpawnButton("9. Fly Coil", Color3.fromRGB(255, 215, 0), 9, spawnFlyCoil)
+addSpawnButton("10. Admin Coil", Color3.fromRGB(150, 150, 150), 10, spawnAdminCoil)
