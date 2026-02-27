@@ -1,0 +1,142 @@
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 1. TẠO GIAO DIỆN (GUI)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoKeyPressGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 150)
+frame.Position = UDim2.new(0.5, -110, 0.5, -75)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true -- Cho phép kéo thả GUI
+frame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "Auto Key Press"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.Parent = frame
+
+local textBox = Instance.new("TextBox")
+textBox.Size = UDim2.new(0, 180, 0, 40)
+textBox.Position = UDim2.new(0.5, -90, 0, 40)
+textBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+textBox.Font = Enum.Font.Gotham
+textBox.TextSize = 18
+textBox.PlaceholderText = "Nhập 1 phím (VD: w, space)"
+textBox.Text = ""
+textBox.Parent = frame
+
+local corner2 = Instance.new("UICorner")
+corner2.CornerRadius = UDim.new(0, 6)
+corner2.Parent = textBox
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 180, 0, 40)
+toggleBtn.Position = UDim2.new(0.5, -90, 0, 95)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "Bắt đầu"
+toggleBtn.Parent = frame
+
+local corner3 = Instance.new("UICorner")
+corner3.CornerRadius = UDim.new(0, 6)
+corner3.Parent = toggleBtn
+
+-- 2. LOGIC XỬ LÝ PHÍM
+local isRunning = false
+local loopThread = nil
+local currentKey = nil
+
+-- Hàm chuyển đổi chuỗi thành Enum.KeyCode
+local function getKeyCode(str)
+	if str == " " or str:lower() == "space" then 
+		return Enum.KeyCode.Space 
+	end
+	
+	local upperStr = string.upper(str)
+	local success, keycode = pcall(function()
+		return Enum.KeyCode[upperStr]
+	end)
+	
+	if success then 
+		return keycode 
+	end
+	return nil
+end
+
+-- Hàm Bật/Tắt auto
+local function toggleAuto()
+	if isRunning then
+		-- Tắt auto
+		isRunning = false
+		toggleBtn.Text = "Bắt đầu"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+		
+		-- Nhả phím ra nếu đang giữ
+		if currentKey then
+			VirtualInputManager:SendKeyEvent(false, currentKey, false, game)
+		end
+		
+		if loopThread then
+			task.cancel(loopThread)
+			loopThread = nil
+		end
+	else
+		-- Bật auto
+		local inputStr = textBox.Text
+		if #inputStr == 0 then return end
+		
+		-- Chỉ lấy ký tự đầu tiên (nếu người dùng nhập nhiều chữ)
+		if inputStr ~= "space" then
+			inputStr = string.sub(inputStr, 1, 1)
+		end
+		
+		local keyCode = getKeyCode(inputStr)
+		if not keyCode then 
+			textBox.Text = "Phím ko hợp lệ!"
+			task.wait(1)
+			textBox.Text = ""
+			return 
+		end
+		
+		currentKey = keyCode
+		isRunning = true
+		toggleBtn.Text = "Dừng"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+		
+		-- Tạo vòng lặp nhấp nhả phím liên tục
+		loopThread = task.spawn(function()
+			while isRunning do
+				-- Gửi lệnh nhấn phím xuống
+				VirtualInputManager:SendKeyEvent(true, currentKey, false, game)
+				task.wait(0.05) -- Thời gian giữ phím (có thể chỉnh nhỏ hơn để nhấp nhanh hơn)
+				
+				-- Gửi lệnh nhả phím lên
+				VirtualInputManager:SendKeyEvent(false, currentKey, false, game)
+				task.wait(0.05) -- Thời gian nghỉ giữa 2 lần nhấn
+			end
+		end)
+	end
+end
+
+toggleBtn.MouseButton1Click:Connect(toggleAuto)
