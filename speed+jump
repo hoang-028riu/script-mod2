@@ -1,0 +1,169 @@
+--[[
+    LOOP SPEED & JUMP POWER GUI
+    Extracted logic from Infinite Yield
+    Created by Gemini
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- // BIẾN TRẠNG THÁI //
+local Settings = {
+    LoopSpeed = false,
+    SpeedValue = 16, -- Tốc độ mặc định
+    
+    LoopJump = false,
+    JumpValue = 50   -- Nhảy mặc định
+}
+
+-- // TẠO GUI //
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local UICorner = Instance.new("UICorner")
+local UIListLayout = Instance.new("UIListLayout")
+
+ScreenGui.Name = "LoopStatsGui"
+ScreenGui.Parent = game:GetService("CoreGui")
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+ScreenGui.ResetOnSpawn = false
+
+-- Main Frame
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -80)
+MainFrame.Size = UDim2.new(0, 220, 0, 170)
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+UICorner.Parent = MainFrame
+UICorner.CornerRadius = UDim.new(0, 8)
+
+-- Title
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1.000
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "LOOP STATS"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+
+-- Layout Container
+local Container = Instance.new("Frame")
+Container.Parent = MainFrame
+Container.BackgroundTransparency = 1
+Container.Position = UDim2.new(0, 10, 0, 40)
+Container.Size = UDim2.new(1, -20, 1, -50)
+
+UIListLayout.Parent = Container
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+
+-- // HÀM TẠO CHỨC NĂNG //
+local function CreateControl(text, defaultVal, type)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 50)
+    Frame.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    local fc = Instance.new("UICorner"); fc.Parent = Frame; fc.CornerRadius = UDim.new(0, 6)
+    Frame.Parent = Container
+
+    -- Label
+    local Label = Instance.new("TextLabel")
+    Label.Parent = Frame
+    Label.BackgroundTransparency = 1
+    Label.Position = UDim2.new(0, 5, 0, 0)
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = text
+    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- TextBox (Ô nhập số)
+    local TextBox = Instance.new("TextBox")
+    TextBox.Parent = Frame
+    TextBox.Position = UDim2.new(0, 5, 0.5, 0)
+    TextBox.Size = UDim2.new(0.6, 0, 0, 20)
+    TextBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    TextBox.Text = tostring(defaultVal)
+    TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextBox.Font = Enum.Font.Gotham
+    TextBox.TextSize = 14
+    local tbc = Instance.new("UICorner"); tbc.Parent = TextBox; tbc.CornerRadius = UDim.new(0, 4)
+
+    -- Toggle Button (Nút Bật/Tắt)
+    local Toggle = Instance.new("TextButton")
+    Toggle.Parent = Frame
+    Toggle.Position = UDim2.new(0.65, 0, 0.5, 0)
+    Toggle.Size = UDim2.new(0.3, 0, 0, 20)
+    Toggle.BackgroundColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ (Off)
+    Toggle.Text = "OFF"
+    Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Toggle.Font = Enum.Font.GothamBold
+    Toggle.TextSize = 12
+    local tgc = Instance.new("UICorner"); tgc.Parent = Toggle; tgc.CornerRadius = UDim.new(0, 4)
+
+    -- Logic
+    TextBox.FocusLost:Connect(function()
+        local num = tonumber(TextBox.Text)
+        if num then
+            if type == "Speed" then Settings.SpeedValue = num end
+            if type == "Jump" then Settings.JumpValue = num end
+        else
+            TextBox.Text = (type == "Speed" and Settings.SpeedValue) or Settings.JumpValue
+        end
+    end)
+
+    Toggle.MouseButton1Click:Connect(function()
+        if type == "Speed" then
+            Settings.LoopSpeed = not Settings.LoopSpeed
+            Toggle.Text = Settings.LoopSpeed and "ON" or "OFF"
+            Toggle.BackgroundColor3 = Settings.LoopSpeed and Color3.fromRGB(60, 255, 60) or Color3.fromRGB(255, 60, 60)
+        elseif type == "Jump" then
+            Settings.LoopJump = not Settings.LoopJump
+            Toggle.Text = Settings.LoopJump and "ON" or "OFF"
+            Toggle.BackgroundColor3 = Settings.LoopJump and Color3.fromRGB(60, 255, 60) or Color3.fromRGB(255, 60, 60)
+        end
+    end)
+end
+
+-- Tạo 2 ô điều khiển
+CreateControl("Loop Speed", 16, "Speed")
+CreateControl("Loop JumpPower", 50, "Jump")
+
+-- // VÒNG LẶP XỬ LÝ (CORE LOGIC) //
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return end
+
+    -- Xử lý Loop Speed
+    if Settings.LoopSpeed then
+        -- Liên tục đặt lại tốc độ
+        if hum.WalkSpeed ~= Settings.SpeedValue then
+            hum.WalkSpeed = Settings.SpeedValue
+        end
+    end
+
+    -- Xử lý Loop Jump
+    if Settings.LoopJump then
+        -- Liên tục đặt lại lực nhảy
+        hum.UseJumpPower = true -- Đảm bảo dùng JumpPower thay vì JumpHeight
+        if hum.JumpPower ~= Settings.JumpValue then
+            hum.JumpPower = Settings.JumpValue
+        end
+    end
+end)
+
+-- Thông báo
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Loop Stats GUI";
+    Text = "Enter value then press OFF to ON";
+    Duration = 5;
+})
