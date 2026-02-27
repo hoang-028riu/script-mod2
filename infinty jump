@@ -1,0 +1,82 @@
+--// Infinite Jump Toggle GUI Script
+--// Made clean & working for LocalScript (place inside StarterPlayerScripts)
+
+-- Biến toàn cục điều khiển
+_G.InfiniteJumpEnabled = false
+
+-- Tạo ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "InfiniteJumpGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Tạo Frame có thể kéo thả
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 180, 0, 70)
+Frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame.BackgroundTransparency = 0.1
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+Frame.BorderSizePixel = 0
+Frame.AnchorPoint = Vector2.new(0, 0)
+
+-- Tạo tiêu đề
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.BackgroundTransparency = 1
+Title.Text = "Infinite Jump"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextScaled = true
+Title.Parent = Frame
+
+-- Nút bật/tắt
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0.8, 0, 0, 30)
+ToggleButton.Position = UDim2.new(0.1, 0, 0.5, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Text = "OFF"
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextScaled = true
+ToggleButton.Parent = Frame
+ToggleButton.AutoButtonColor = false
+ToggleButton.BorderSizePixel = 0
+
+-- Chức năng đổi trạng thái
+local function ToggleInfiniteJump()
+	_G.InfiniteJumpEnabled = not _G.InfiniteJumpEnabled
+	if _G.InfiniteJumpEnabled then
+		ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+		ToggleButton.Text = "ON"
+	else
+		ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+		ToggleButton.Text = "OFF"
+	end
+end
+
+ToggleButton.MouseButton1Click:Connect(ToggleInfiniteJump)
+
+-- Xử lý nhảy vô hạn
+local Player = game:GetService("Players").LocalPlayer
+local Mouse = Player:GetMouse()
+
+Mouse.KeyDown:Connect(function(key)
+	if _G.InfiniteJumpEnabled and key == " " then
+		local Humanoid = Player.Character and Player.Character:FindFirstChildOfClass("Humanoid")
+		if Humanoid then
+			Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			task.wait()
+			Humanoid:ChangeState(Enum.HumanoidStateType.Seated)
+		end
+	end
+end)
+
+-- Thông báo khởi động
+game:GetService("StarterGui"):SetCore("SendNotification", {
+	Title = "Infinite Jump";
+	Text = "Script loaded! Use the ON/OFF button.";
+	Duration = 5;
+})
