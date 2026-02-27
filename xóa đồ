@@ -1,0 +1,231 @@
+-- 🧱 Object Edit Tool (PC version - draggable menu)
+-- ✨ Chức năng:
+-- Chọn vật, kéo di chuyển, xóa bằng phím, undo, có menu kéo thả và tự hiện lại khi reset
+
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local uis = game:GetService("UserInputService")
+local camera = workspace.CurrentCamera
+local starterGui = game:GetService("StarterGui")
+
+-- ⚙️ Trạng thái
+local selectedObject = nil
+local draggingObject = false
+local dragOffset = Vector3.new(0, 0, 0)
+local dragPlaneY = nil
+local moveHistory = {}
+local deletedHistory = {}
+local deleteKey = Enum.KeyCode.X
+
+local selectingEnabled = true
+local moveEnabled = false
+
+-- 📦 GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "EditMenu"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 260, 0, 170)
+frame.Position = UDim2.new(0, 20, 0, 100)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 0
+frame.BackgroundTransparency = 0.1
+frame.Active = true
+frame.Draggable = false -- ta sẽ tự xử lý kéo thả mượt hơn
+frame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner", frame)
+uiCorner.CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "🧱 Object Edit Tool"
+title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Parent = frame
+
+-- 🖱️ Kéo thả menu
+local draggingMenu = false
+local dragStart, startPos
+
+local function updateMenu(input)
+	local delta = input.Position - dragStart
+	frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+title.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingMenu = true
+		dragStart = input.Position
+		startPos = frame.Position
+	end
+end)
+
+title.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		if draggingMenu then
+			updateMenu(input)
+		end
+	end
+end)
+
+title.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingMenu = false
+	end
+end)
+
+-- 🔘 Nút trong menu
+local function makeButton(y, text, color)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -20, 0, 30)
+	btn.Position = UDim2.new(0, 10, 0, y)
+	btn.Text = text
+	btn.BackgroundColor3 = color
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.Parent = frame
+	Instance.new("UICorner", btn)
+	return btn
+end
+
+local selectBtn = makeButton(40, "🖱️ Bật chọn vật (Đang bật)", Color3.fromRGB(80, 120, 80))
+local moveBtn = makeButton(80, "📦 Bật chỉnh vị trí (Tắt)", Color3.fromRGB(60, 60, 60))
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(0.5, -15, 0, 30)
+keyBox.Position = UDim2.new(0, 10, 0, 120)
+keyBox.PlaceholderText = "Phím xóa (VD: X)"
+keyBox.Text = "X"
+keyBox.Font = Enum.Font.Gotham
+keyBox.TextSize = 14
+keyBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+keyBox.TextColor3 = Color3.new(1, 1, 1)
+keyBox.Parent = frame
+Instance.new("UICorner", keyBox)
+
+local applyBtn = Instance.new("TextButton")
+applyBtn.Size = UDim2.new(0.5, -15, 0, 30)
+applyBtn.Position = UDim2.new(0.5, 5, 0, 120)
+applyBtn.Text = "Áp dụng"
+applyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+applyBtn.TextColor3 = Color3.new(1, 1, 1)
+applyBtn.Font = Enum.Font.Gotham
+applyBtn.TextSize = 14
+applyBtn.Parent = frame
+Instance.new("UICorner", applyBtn)
+
+local undoBtn = makeButton(155, "↩️ Hoàn tác (Undo)", Color3.fromRGB(100, 80, 60))
+
+-- 🔄 Cập nhật giao diện
+local function updateButtons()
+	selectBtn.Text = selectingEnabled and "🖱️ Bật chọn vật (Đang bật)" or "🖱️ Bật chọn vật (Tắt)"
+	selectBtn.BackgroundColor3 = selectingEnabled and Color3.fromRGB(80, 120, 80) or Color3.fromRGB(60, 60, 60)
+
+	moveBtn.Text = moveEnabled and "📦 Bật chỉnh vị trí (Đang bật)" or "📦 Bật chỉnh vị trí (Tắt)"
+	moveBtn.BackgroundColor3 = moveEnabled and Color3.fromRGB(120, 80, 80) or Color3.fromRGB(60, 60, 60)
+end
+
+updateButtons()
+
+-- 🎯 Chọn vật
+mouse.Button1Down:Connect(function()
+	if not selectingEnabled then return end
+	local target = mouse.Target
+	if target and target:IsA("BasePart") then
+		selectedObject = target
+		starterGui:SetCore("SendNotification", {
+			Title = "🎯 Đã chọn vật",
+			Text = target.Name,
+			Duration = 2
+		})
+	end
+end)
+
+-- 📦 Kéo vật
+uis.InputBegan:Connect(function(input)
+	if moveEnabled and selectedObject and input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingObject = true
+		dragPlaneY = selectedObject.Position.Y
+		dragOffset = selectedObject.Position - mouse.Hit.Position
+	end
+end)
+
+uis.InputChanged:Connect(function(input)
+	if draggingObject and selectedObject then
+		local newPos = Vector3.new(mouse.Hit.Position.X, dragPlaneY, mouse.Hit.Position.Z)
+		table.insert(moveHistory, {object = selectedObject, oldPos = selectedObject.Position})
+		selectedObject.Position = newPos + dragOffset
+	end
+end)
+
+uis.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingObject = false
+	end
+end)
+
+-- 🗑️ Xóa bằng phím
+uis.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if selectedObject and input.KeyCode == deleteKey then
+		table.insert(deletedHistory, selectedObject:Clone())
+		deletedHistory[#deletedHistory].Parent = nil
+		selectedObject:Destroy()
+		selectedObject = nil
+		starterGui:SetCore("SendNotification", {Title = "🗑️ Đã xóa", Text = "Vật đã bị xóa", Duration = 2})
+	end
+end)
+
+-- 🔁 Undo
+undoBtn.MouseButton1Click:Connect(function()
+	if #deletedHistory > 0 then
+		local last = table.remove(deletedHistory)
+		last.Parent = workspace
+		starterGui:SetCore("SendNotification", {Title = "↩️ Undo", Text = "Đã hoàn tác xóa", Duration = 2})
+	elseif #moveHistory > 0 then
+		local lastMove = table.remove(moveHistory)
+		if lastMove.object then
+			lastMove.object.Position = lastMove.oldPos
+			starterGui:SetCore("SendNotification", {Title = "↩️ Undo", Text = "Hoàn tác di chuyển", Duration = 2})
+		end
+	end
+end)
+
+-- ⚙️ Nút bấm
+selectBtn.MouseButton1Click:Connect(function()
+	selectingEnabled = not selectingEnabled
+	updateButtons()
+end)
+
+moveBtn.MouseButton1Click:Connect(function()
+	moveEnabled = not moveEnabled
+	updateButtons()
+end)
+
+applyBtn.MouseButton1Click:Connect(function()
+	local key = string.upper(keyBox.Text)
+	if Enum.KeyCode[key] then
+		deleteKey = Enum.KeyCode[key]
+		starterGui:SetCore("SendNotification", {Title = "✅ Đã đặt phím xóa", Text = key, Duration = 2})
+	else
+		starterGui:SetCore("SendNotification", {Title = "⚠️ Lỗi", Text = "Phím không hợp lệ", Duration = 2})
+	end
+end)
+
+-- 🔄 Hiện lại khi reset
+player.CharacterAdded:Connect(function()
+	wait(1)
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+	selectingEnabled = true
+	updateButtons()
+end)
+
+-- 🚀 Auto bật chọn
+selectingEnabled = true
+updateButtons()
