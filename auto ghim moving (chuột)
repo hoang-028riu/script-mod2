@@ -1,0 +1,328 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local GuiService = game:GetService("GuiService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = Workspace.CurrentCamera
+
+-- Tạo GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AimbotGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Vòng FOV theo chuột
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, 200, 0, 200)
+fovCircle.Position = UDim2.new(0, 0, 0, 0) -- Sẽ được cập nhật theo chuột
+fovCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+fovCircle.BackgroundTransparency = 0.8
+fovCircle.BorderSizePixel = 0
+fovCircle.Visible = false
+fovCircle.ZIndex = 10
+fovCircle.Parent = screenGui
+
+local fovCorner = Instance.new("UICorner")
+fovCorner.CornerRadius = UDim.new(1, 0)
+fovCorner.Parent = fovCircle
+
+-- Menu chính
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 250, 0, 200) -- Tăng chiều cao để thêm ô nhập
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -100)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "Toggle"
+toggleButton.Size = UDim2.new(0, 200, 0, 40)
+toggleButton.Position = UDim2.new(0.5, -100, 0.1, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleButton.Text = "Aimbot: OFF"
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 18
+toggleButton.Parent = mainFrame
+
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Name = "FOVLabel"
+fovLabel.Size = UDim2.new(0, 200, 0, 30)
+fovLabel.Position = UDim2.new(0.5, -100, 0.3, 0)
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "FOV: 30°"
+fovLabel.TextColor3 = Color3.new(1, 1, 1)
+fovLabel.Font = Enum.Font.SourceSans
+fovLabel.TextSize = 16
+fovLabel.Parent = mainFrame
+
+local fovSlider = Instance.new("TextButton")
+fovSlider.Name = "FOVSlider"
+fovSlider.Size = UDim2.new(0, 200, 0, 10)
+fovSlider.Position = UDim2.new(0.5, -100, 0.5, 0)
+fovSlider.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+fovSlider.Text = ""
+fovSlider.AutoButtonColor = false
+fovSlider.Parent = mainFrame
+
+local sliderHandle = Instance.new("Frame")
+sliderHandle.Name = "SliderHandle"
+sliderHandle.Size = UDim2.new(0, 20, 0, 20)
+sliderHandle.Position = UDim2.new(0, 90, 0, -5)
+sliderHandle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderHandle.BorderSizePixel = 0
+sliderHandle.Parent = fovSlider
+
+-- Ô nhập phím và nút áp dụng
+local keyLabel = Instance.new("TextLabel")
+keyLabel.Name = "KeyLabel"
+keyLabel.Size = UDim2.new(0, 80, 0, 30)
+keyLabel.Position = UDim2.new(0.1, 0, 0.75, 0)
+keyLabel.BackgroundTransparency = 1
+keyLabel.Text = "Phím:"
+keyLabel.TextColor3 = Color3.new(1, 1, 1)
+keyLabel.Font = Enum.Font.SourceSans
+keyLabel.TextSize = 16
+keyLabel.TextXAlignment = Enum.TextXAlignment.Left
+keyLabel.Parent = mainFrame
+
+local keyInput = Instance.new("TextBox")
+keyInput.Name = "KeyInput"
+keyInput.Size = UDim2.new(0, 80, 0, 30)
+keyInput.Position = UDim2.new(0.3, 0, 0.75, 0)
+keyInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+keyInput.Text = "F"
+keyInput.TextColor3 = Color3.new(1, 1, 1)
+keyInput.Font = Enum.Font.SourceSans
+keyInput.TextSize = 16
+keyInput.ClearTextOnFocus = false
+keyInput.Parent = mainFrame
+
+local applyButton = Instance.new("TextButton")
+applyButton.Name = "ApplyButton"
+applyButton.Size = UDim2.new(0, 60, 0, 30)
+applyButton.Position = UDim2.new(0.65, 0, 0.75, 0)
+applyButton.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+applyButton.Text = "Áp dụng"
+applyButton.TextColor3 = Color3.new(1, 1, 1)
+applyButton.Font = Enum.Font.SourceSans
+applyButton.TextSize = 14
+applyButton.Parent = mainFrame
+
+-- Biến cấu hình
+local aimEnabled = false
+local fovValue = 30
+local smoothing = 0.15
+local maxDistance = 200
+local minDistance = 5 -- Khoảng cách tối thiểu để không ngắm
+local lastCheckTime = 0
+local checkInterval = 0.3 -- Tăng thời gian kiểm tra để giảm lag
+local currentTarget = nil
+local movingParts = {}
+local toggleKey = Enum.KeyCode.F -- Phím mặc định
+
+-- Tối ưu hóa: Chỉ cập nhật danh sách vật thể khi cần
+local function updateMovingParts()
+    movingParts = {}
+    -- Chỉ kiểm tra trong phạm vi gần để giảm tải
+    for _, obj in pairs(Workspace:GetPartBoundsInRadius(camera.CFrame.Position, maxDistance)) do
+        if obj:IsA("BasePart") and obj.Velocity.Magnitude > 0.5 then
+            -- Không thêm vật thể của người chơi
+            if not obj:IsDescendantOf(player.Character) then
+                table.insert(movingParts, obj)
+            end
+        end
+    end
+end
+
+-- Cập nhật giao diện
+local function updateUI()
+    toggleButton.Text = aimEnabled and "Aimbot: ON" or "Aimbot: OFF"
+    toggleButton.BackgroundColor3 = aimEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+    fovLabel.Text = "FOV: " .. math.floor(fovValue) .. "°"
+    
+    local percentage = (fovValue - 10) / 90
+    sliderHandle.Position = UDim2.new(percentage, -10, 0, -5)
+    
+    -- Cập nhật vòng FOV theo chuột
+    local fovSize = fovValue * 5 -- Tỷ lệ 1:5
+    fovCircle.Size = UDim2.new(0, fovSize, 0, fovSize)
+    fovCircle.Visible = aimEnabled
+end
+
+-- Tính toán góc giữa hai vector
+local function getAngle(vector1, vector2)
+    return math.deg(math.acos(vector1.Unit:Dot(vector2.Unit)))
+end
+
+-- Lấy vị trí của người chơi
+local function getPlayerPosition()
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        return player.Character.HumanoidRootPart.Position
+    end
+    return camera.CFrame.Position
+end
+
+-- Tìm vật thể gần nhất trong FOV
+local function findTarget()
+    local cameraPos = camera.CFrame.Position
+    local playerPos = getPlayerPosition()
+    local lookVector = camera.CFrame.LookVector
+    local closestTarget = nil
+    local closestAngle = fovValue
+    
+    for _, obj in pairs(movingParts) do
+        if obj and obj.Parent then
+            local objPos = obj.Position
+            local direction = (objPos - cameraPos).Unit
+            local angle = getAngle(lookVector, direction)
+            
+            -- Kiểm tra khoảng cách từ vật thể đến người chơi
+            local distanceToPlayer = (objPos - playerPos).Magnitude
+            
+            if angle <= fovValue and distanceToPlayer > minDistance then
+                local distance = (objPos - cameraPos).Magnitude
+                if distance <= maxDistance and angle < closestAngle then
+                    closestTarget = obj
+                    closestAngle = angle
+                end
+            end
+        end
+    end
+    
+    return closestTarget
+end
+
+-- Di chuyển chuột đến vị trí
+local function moveMouseTo(target)
+    local targetPos = target.Position
+    local vector = camera:WorldToScreenPoint(targetPos)
+    
+    if vector.Z > 0 then
+        local mousePos = Vector2.new(mouse.X, mouse.Y)
+        local targetPos2D = Vector2.new(vector.X, vector.Y)
+        local newPos = mousePos:Lerp(targetPos2D, smoothing)
+        
+        mousemoverel(newPos.X - mouse.X, newPos.Y - mouse.Y)
+    end
+end
+
+-- Cập nhật vị trí vòng FOV theo chuột
+local function updateFOVPosition()
+    if aimEnabled then
+        local fovSize = fovValue * 5
+        fovCircle.Position = UDim2.new(0, mouse.X - fovSize/2, 0, mouse.Y - fovSize/2)
+    end
+end
+
+-- Vòng lặp chính
+RunService.Heartbeat:Connect(function()
+    if aimEnabled then
+        local currentTime = tick()
+        
+        -- Cập nhật danh sách vật thể đang di chuyển định kỳ
+        if currentTime - lastCheckTime > checkInterval then
+            updateMovingParts()
+            lastCheckTime = currentTime
+            
+            -- Tìm mục tiêu mới
+            currentTarget = findTarget()
+        end
+        
+        -- Di chuyển chuột đến mục tiêu
+        if currentTarget and currentTarget.Parent then
+            moveMouseTo(currentTarget)
+        else
+            currentTarget = nil
+        end
+        
+        -- Cập nhật vị trí vòng FOV
+        updateFOVPosition()
+    end
+end)
+
+-- Xử lý nút bật/tắt
+toggleButton.MouseButton1Click:Connect(function()
+    aimEnabled = not aimEnabled
+    updateUI()
+end)
+
+-- Xử lý thanh trượt FOV
+local draggingSlider = false
+
+fovSlider.MouseButton1Down:Connect(function()
+    draggingSlider = true
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local sliderPos = fovSlider.AbsolutePosition.X
+        local sliderSize = fovSlider.AbsoluteSize.X
+        local mousePos = input.Position.X
+        
+        local percentage = math.clamp((mousePos - sliderPos) / sliderSize, 0, 1)
+        fovValue = 10 + percentage * 90
+        
+        updateUI()
+    end
+    
+    -- Cập nhật vị trí vòng FOV khi di chuyển chuột
+    if aimEnabled then
+        updateFOVPosition()
+    end
+end)
+
+-- Xử lý ô nhập phím và nút áp dụng
+applyButton.MouseButton1Click:Connect(function()
+    local keyText = keyInput.Text:upper()
+    
+    -- Kiểm tra xem phím có hợp lệ không
+    local success, keyCode = pcall(function()
+        return Enum.KeyCode[keyText]
+    end)
+    
+    if success and keyCode then
+        toggleKey = keyCode
+        applyButton.Text = "Đã lưu!"
+        applyButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        
+        -- Đặt lại sau 1 giây
+        game:GetService("Debris"):AddItem(applyButton, 1)
+        wait(1)
+        applyButton.Text = "Áp dụng"
+        applyButton.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+    else
+        applyButton.Text = "Lỗi!"
+        applyButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        
+        -- Đặt lại sau 1 giây
+        game:GetService("Debris"):AddItem(applyButton, 1)
+        wait(1)
+        applyButton.Text = "Áp dụng"
+        applyButton.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+    end
+end)
+
+-- Bắt sự kiện nhấn phím
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == toggleKey then
+        aimEnabled = not aimEnabled
+        updateUI()
+    end
+end)
+
+-- Khởi tạo giao diện
+updateUI()
