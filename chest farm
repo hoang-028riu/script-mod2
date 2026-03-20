@@ -1,0 +1,409 @@
+local player = game.Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- ==========================================
+-- 1. TẠO GIAO DIỆN (GUI) ON/OFF, HIỆU ỨNG & KÉO THẢ
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoChestGui"
+screenGui.ResetOnSpawn = false 
+
+local success, err = pcall(function()
+    screenGui.Parent = game:GetService("CoreGui")
+end)
+if not success then
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 180, 0, 55)
+frame.Position = UDim2.new(0.5, -90, 0, 30)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Selectable = true
+frame.Parent = screenGui
+
+-- Thêm bo góc cho mượt mắt
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.Parent = frame
+
+-- Thêm viền (Stroke)
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(100, 100, 100)
+uiStroke.Thickness = 2
+uiStroke.Parent = frame
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(1, 0, 1, 0)
+toggleBtn.Text = "AUTO CHEST: OFF"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 15
+toggleBtn.BackgroundTransparency = 1
+toggleBtn.Parent = frame
+
+-- Hiệu ứng Hover & Click cho GUI
+toggleBtn.MouseEnter:Connect(function()
+    TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(200, 200, 255)}):Play()
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}):Play()
+end)
+
+toggleBtn.MouseLeave:Connect(function()
+    TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(100, 100, 100)}):Play()
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(25, 25, 30)}):Play()
+end)
+
+toggleBtn.MouseButton1Down:Connect(function()
+    TweenService:Create(frame, TweenInfo.new(0.1), {Size = UDim2.new(0, 170, 0, 50)}):Play()
+end)
+
+toggleBtn.MouseButton1Up:Connect(function()
+    TweenService:Create(frame, TweenInfo.new(0.1), {Size = UDim2.new(0, 180, 0, 55)}):Play()
+end)
+
+-- Sửa lỗi tính năng kéo thả GUI cho PC
+local dragging, dragInput, dragStart, startPos
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        -- Dùng Tween để kéo thả nhìn mượt hơn
+        TweenService:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+            Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        }):Play()
+    end
+end)
+
+-- ==========================================
+-- 2. DỮ LIỆU RƯƠNG VÀ GHI NHỚ VỊ TRÍ
+-- ==========================================
+local isFarming = false
+local MAX_SCAN_RADIUS = 10000000 -- Phạm vi quét cực đại toàn map
+local currentTween = nil
+local noclipConnection = nil
+
+-- Hàm random tốc độ, ưu tiên từ 350 trở xuống
+local function getRandomSpeed()
+    local chance = math.random(1, 100)
+    if chance <= 75 then
+        -- 75% cơ hội tốc độ nằm trong khoảng an toàn 250 - 350
+        return math.random(250, 350)
+    else
+        -- 25% cơ hội tốc độ bứt phá lên 351 - 1000
+        return math.random(351, 1000)
+    end
+end
+
+-- Danh sách các đảo để bay tới load map khi không thấy rương
+local islandCoords = {
+    Vector3.new(2400, 21, -6500),
+    Vector3.new(-5040.65, 314.56, -3007.66),
+    Vector3.new(-12238.66, 331.77, -9083.60),
+    Vector3.new(-290.00, 20.65, 5600.00),
+    Vector3.new(5847.27, 1013.09, 204.92),
+    Vector3.new(-16200, 100, -100),
+    Vector3.new(-2000, 50, -12000),
+    Vector3.new(-900, 100, -11000),
+    Vector3.new(-9500, 140, 5500)
+}
+
+-- Bảng ghi nhớ rương đã quét: format { ["x,y,z"] = {position = Vector3, type = string, readyTime = number, cooldown = number} }
+local knownChests = {}
+
+-- Chuyển vị trí thành chuỗi để làm ID cho rương
+local function getPosKey(pos)
+    return math.floor(pos.X/5) .. "," .. math.floor(pos.Y/5) .. "," .. math.floor(pos.Z/5)
+end
+
+-- Lấy vị trí rương
+local function getChestPosition(chest)
+    if chest:IsA("BasePart") then return chest.Position end
+    if chest:IsA("Model") and chest.PrimaryPart then return chest.PrimaryPart.Position end
+    for _, part in ipairs(chest:GetDescendants()) do
+        if part:IsA("BasePart") then
+            return part.Position
+        end
+    end
+    return nil
+end
+
+-- Phân loại rương và lấy thời gian hồi (Cooldown tính bằng giây)
+local function getChestInfo(name)
+    name = string.lower(name)
+    if string.find(name, "chest 3") or string.find(name, "chest3") then
+        return "Diamond (Kim Cương)", 15 * 60
+    elseif string.find(name, "chest 2") or string.find(name, "chest2") then
+        return "Gold (Vàng)", 10 * 60
+    elseif string.find(name, "chest 1") or string.find(name, "chest1") or string.find(name, "chest") then
+        return "Silver (Bạc)", 5 * 60
+    end
+    return nil, nil
+end
+
+-- ==========================================
+-- 3. LOGIC BAY & QUÉT RƯƠNG GẦN NHẤT
+-- ==========================================
+local function stopFlying()
+    isFarming = false
+    toggleBtn.Text = "AUTO CHEST: OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
+    uiStroke.Color = Color3.fromRGB(100, 100, 100)
+
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
+    
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.Anchored = false
+    end
+    
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+    print("[AutoChest] Đã TẮT bay!")
+end
+
+local function flyTo(targetPos)
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+
+    local goalPos = targetPos + Vector3.new(0, 3, 0) -- Đích đến cao hơn rương 3 stud
+    local CHUNK_DISTANCE = 300 -- Cập nhật vị trí mỗi 300m
+
+    -- Vòng lặp chia nhỏ đường bay thành nhiều chặng
+    while isFarming do
+        local currentPos = hrp.Position
+        local distanceLeft = (currentPos - goalPos).Magnitude
+        
+        -- Nếu đã đến đủ gần rương (cách dưới 3 stud), thoát vòng lặp chặng bay
+        if distanceLeft <= 3 then
+            break
+        end
+
+        -- Bật lại Noclip khi bắt đầu chặng bay mới
+        if not noclipConnection then
+            noclipConnection = RunService.Stepped:Connect(function()
+                if player.Character then
+                    for _, part in ipairs(player.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+
+        hrp.Anchored = true 
+        
+        -- Tính toán điểm đến của chặng bay này (không vượt quá 300 stud)
+        local stepDist = math.min(CHUNK_DISTANCE, distanceLeft)
+        local direction = (goalPos - currentPos).Unit
+        local nextWaypoint = currentPos + (direction * stepDist)
+
+        -- Áp dụng tốc độ ngẫu nhiên cho chặng này
+        local currentSpeed = getRandomSpeed()
+        local timeToTravel = stepDist / currentSpeed
+        local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear)
+        
+        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
+        currentTween:Play()
+        
+        local completed = false
+        local conn
+        conn = currentTween.Completed:Connect(function()
+            completed = true
+        end)
+
+        while not completed and isFarming do
+            task.wait()
+        end
+
+        if conn then conn:Disconnect() end
+
+        if not isFarming then break end
+
+        -- Cứ mỗi 300 stud, giả vờ tắt vật lý để server cập nhật vị trí chống báo lỗi
+        if distanceLeft > CHUNK_DISTANCE then
+            hrp.Anchored = false
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+            -- Dừng 0.1 giây để nhân vật có tương tác rơi vật lý nhẹ, game sẽ ghi nhận vị trí
+            task.wait(0.1) 
+        end
+    end
+
+    -- ========================================================
+    -- [MỚI]: KHI ĐẾN NƠI, TRẢ LẠI VẬT LÝ ĐỂ NHÂN VẬT RƠI XUỐNG
+    -- ========================================================
+    if isFarming and char and char:FindFirstChild("HumanoidRootPart") then
+        hrp.Anchored = false -- Tắt neo
+        if noclipConnection then
+            noclipConnection:Disconnect() -- Tắt xuyên tường
+            noclipConnection = nil
+        end
+        -- Đợi 0.5 giây để nhân vật có đủ thời gian rơi tự do chạm vào rương
+        task.wait(0.5)
+    end
+end
+
+-- Cập nhật danh sách rương hiện có trên bản đồ vào bộ nhớ
+local function scanAndUpdateChests()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local typeName, cooldown = getChestInfo(obj.Name)
+        if typeName then
+            local pos = getChestPosition(obj)
+            if pos then
+                local key = getPosKey(pos)
+                if not knownChests[key] then
+                    knownChests[key] = {
+                        position = pos,
+                        type = typeName,
+                        cooldown = cooldown,
+                        readyTime = 0 
+                    }
+                end
+            end
+        end
+    end
+end
+
+-- Tìm rương sẵn sàng nhặt và ở gần nhất
+local function getNearestAvailableChest()
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local hrpPos = char.HumanoidRootPart.Position
+
+    -- Quét toàn bộ map đã load
+    scanAndUpdateChests()
+
+    local nearestKey = nil
+    local nearestData = nil
+    local minDistance = math.huge
+    local currentTime = tick()
+
+    for key, data in pairs(knownChests) do
+        -- Kiểm tra thời gian hồi sinh
+        if currentTime >= data.readyTime then
+            local dist = (data.position - hrpPos).Magnitude
+            
+            -- Lọc các rương nằm trong phạm vi cực đại 10.000.000 mét
+            if dist < minDistance and dist <= MAX_SCAN_RADIUS then
+                minDistance = dist
+                nearestKey = key
+                nearestData = data
+            end
+        end
+    end
+
+    if nearestKey then
+        return {key = nearestKey, data = nearestData}
+    end
+    return nil
+end
+
+-- Vòng lặp chính
+local function startFarming()
+    task.spawn(function()
+        print("[AutoChest] Bắt đầu quét map với bán kính " .. MAX_SCAN_RADIUS .. " mét...")
+        while isFarming do
+            local targetChest = getNearestAvailableChest()
+            
+            if targetChest then
+                print("[AutoChest] Đang bay đến rương " .. targetChest.data.type .. "...")
+                flyTo(targetChest.data.position)
+                
+                if not isFarming then break end
+
+                -- Chờ thêm một chút nữa sau khi rơi trúng để game xác nhận việc nhặt thành công
+                task.wait(0.5) 
+                
+                -- Cập nhật thời gian hồi lại của rương này
+                knownChests[targetChest.key].readyTime = tick() + targetChest.data.cooldown
+                print("[AutoChest] Đã thu thập rương " .. targetChest.data.type .. ". Hồi sinh sau " .. (targetChest.data.cooldown / 60) .. " phút.")
+            else
+                -- Khu vực xung quanh hết rương -> Thực hiện nhảy đảo để load map mới
+                local char = player.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local hrpPos = char.HumanoidRootPart.Position
+                    
+                    local bestIsland = nil
+                    local bestDist = math.huge
+
+                    -- Tìm đảo gần nhất nhưng phải cách xa vị trí hiện tại trên 1500m (để tránh đứng im 1 chỗ)
+                    for _, islandPos in ipairs(islandCoords) do
+                        local dist = (islandPos - hrpPos).Magnitude
+                        if dist < bestDist and dist > 1500 then
+                            bestDist = dist
+                            bestIsland = islandPos
+                        end
+                    end
+
+                    -- Nếu không tìm được đảo nào hợp lệ (hiếm gặp), chọn ngẫu nhiên
+                    if not bestIsland then
+                        bestIsland = islandCoords[math.random(1, #islandCoords)]
+                    end
+                    
+                    print("[AutoChest] Hết rương! Đang di chuyển sang đảo khác để tải thêm bản đồ...")
+                    flyTo(bestIsland)
+                    
+                    if not isFarming then break end
+
+                    -- Đợi ngẫu nhiên 5-10 giây để game load các khối (chunks) và rương
+                    local waitTime = math.random(5, 10)
+                    print("[AutoChest] Đã đến khu vực mới, chờ " .. waitTime .. " giây để load rương...")
+                    
+                    local elapsed = 0
+                    while isFarming and elapsed < waitTime do
+                        task.wait(1)
+                        elapsed = elapsed + 1
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- ==========================================
+-- 4. XỬ LÝ NÚT BẤM
+-- ==========================================
+toggleBtn.MouseButton1Click:Connect(function()
+    if isFarming then
+        stopFlying()
+    else
+        isFarming = true
+        toggleBtn.Text = "AUTO CHEST: ON"
+        toggleBtn.TextColor3 = Color3.fromRGB(70, 255, 70)
+        uiStroke.Color = Color3.fromRGB(70, 255, 70)
+        startFarming()
+    end
+end)
