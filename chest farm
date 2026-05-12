@@ -2,71 +2,533 @@ local player = game.Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ==========================================
--- 1. TẠO GIAO DIỆN (GUI) ON/OFF, HIỆU ỨNG & KÉO THẢ
+-- XÁC ĐỊNH THIẾT BỊ (PC / MOBILE)
+-- ==========================================
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+-- ==========================================
+-- 0. TỰ ĐỘNG CHỌN PHE (HẢI TẶC / HẢI QUÂN)
+-- ==========================================
+local TEAM_TO_JOIN = "Pirates" 
+
+task.spawn(function()
+    if player.Team and (player.Team.Name == "Pirates" or player.Team.Name == "Marines") then
+        pcall(function()
+            local playerGui = player:WaitForChild("PlayerGui")
+            if playerGui:FindFirstChild("Main") and playerGui.Main:FindFirstChild("ChooseTeam") then
+                playerGui.Main.ChooseTeam.Visible = false
+            end
+        end)
+        return
+    end
+
+    pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", TEAM_TO_JOIN)
+        end
+    end)
+    pcall(function()
+        local playerGui = player:WaitForChild("PlayerGui")
+        if playerGui:FindFirstChild("Main") and playerGui.Main:FindFirstChild("ChooseTeam") then
+            playerGui.Main.ChooseTeam.Visible = false
+        end
+    end)
+end)
+
+-- ==========================================
+-- 1. TẠO GIAO DIỆN CHÍNH (GUI)
 -- ==========================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AutoChestGui"
+screenGui.Name = "AutoChestGuiV2"
 screenGui.ResetOnSpawn = false 
 
-local success, err = pcall(function()
-    screenGui.Parent = game:GetService("CoreGui")
-end)
-if not success then
-    screenGui.Parent = player:WaitForChild("PlayerGui")
-end
+-- Đưa vào CoreGui hoặc PlayerGui
+local success, _ = pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
+if not success then screenGui.Parent = player:WaitForChild("PlayerGui") end
 
+-- Khung chính
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 180, 0, 55)
-frame.Position = UDim2.new(0.5, -90, 0, 30)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+local frameHeight = isMobile and 85 or 125 
+frame.Size = UDim2.new(0, 200, 0, frameHeight)
+frame.Position = UDim2.new(0.5, -100, 0, 50)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 frame.BorderSizePixel = 0
 frame.Active = true
-frame.Selectable = true
 frame.Parent = screenGui
 
--- Thêm bo góc cho mượt mắt
 local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.CornerRadius = UDim.new(0, 8)
 uiCorner.Parent = frame
 
--- Thêm viền (Stroke)
 local uiStroke = Instance.new("UIStroke")
-uiStroke.Color = Color3.fromRGB(100, 100, 100)
+uiStroke.Color = Color3.fromRGB(60, 60, 70)
 uiStroke.Thickness = 2
 uiStroke.Parent = frame
 
+-- Thanh Tiêu đề
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "🍎 Auto Chest V2"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 14
+titleLabel.Parent = frame
+
+-- Nút Tắt/Bật ESP
+local espBtn = Instance.new("TextButton")
+espBtn.Size = UDim2.new(0, 40, 0, 18)
+espBtn.Position = UDim2.new(1, -45, 0, 6)
+espBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50) -- Đỏ (Tắt mặc định)
+espBtn.Text = "ESP"
+espBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+espBtn.Font = Enum.Font.GothamBold
+espBtn.TextSize = 10
+espBtn.Parent = frame
+
+local espCorner = Instance.new("UICorner")
+espCorner.CornerRadius = UDim.new(0, 4)
+espCorner.Parent = espBtn
+
+-- Nút Bật/Tắt Auto Farm
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(1, 0, 1, 0)
-toggleBtn.Text = "AUTO CHEST: OFF"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
+toggleBtn.Size = UDim2.new(0, 180, 0, 40)
+toggleBtn.Position = UDim2.new(0.5, -90, 0, 35)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+toggleBtn.Text = "BẬT AUTO CHEST"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 15
-toggleBtn.BackgroundTransparency = 1
+toggleBtn.TextSize = 13
 toggleBtn.Parent = frame
 
--- Hiệu ứng Hover & Click cho GUI
-toggleBtn.MouseEnter:Connect(function()
-    TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(200, 200, 255)}):Play()
-    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}):Play()
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = toggleBtn
+
+-- Ô nhập Phím Tắt (PC)
+local keybindBox = Instance.new("TextBox")
+if not isMobile then
+    keybindBox.Size = UDim2.new(0, 180, 0, 30)
+    keybindBox.Position = UDim2.new(0.5, -90, 0, 85)
+    keybindBox.Text = "F"
+    keybindBox.PlaceholderText = "Nhập phím (vd: F)"
+    keybindBox.Font = Enum.Font.GothamSemibold
+    keybindBox.TextSize = 12
+    keybindBox.TextColor3 = Color3.fromRGB(200, 200, 200)
+    keybindBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    keybindBox.Parent = frame
+
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 6)
+    boxCorner.Parent = keybindBox
+end
+
+-- ==========================================
+-- 1.5. TẠO GIAO DIỆN AFK & 3 MINI GAME FULL MÀN HÌNH
+-- ==========================================
+local afkFrame = Instance.new("Frame")
+afkFrame.Size = UDim2.new(1, 0, 1, 0)
+afkFrame.Position = UDim2.new(0, 0, 0, 0)
+afkFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+afkFrame.BackgroundTransparency = 0.2
+afkFrame.ZIndex = 100
+afkFrame.Visible = false
+afkFrame.Parent = screenGui
+
+local afkTitle = Instance.new("TextLabel")
+afkTitle.Size = UDim2.new(1, 0, 0, 80)
+afkTitle.Position = UDim2.new(0, 0, 0, 10)
+afkTitle.BackgroundTransparency = 1
+afkTitle.Text = "ĐANG AFK - TỰ ĐỘNG NHẶT RƯƠNG"
+afkTitle.TextColor3 = Color3.fromRGB(50, 255, 100)
+afkTitle.Font = Enum.Font.GothamBlack
+afkTitle.TextSize = 28
+afkTitle.ZIndex = 101
+afkTitle.Parent = afkFrame
+
+local stopAfkBtn = Instance.new("TextButton")
+stopAfkBtn.Size = UDim2.new(0, 220, 0, 50)
+stopAfkBtn.Position = UDim2.new(0.5, -110, 1, -80)
+stopAfkBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+stopAfkBtn.Text = "TẮT AUTO & ĐÓNG"
+stopAfkBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopAfkBtn.Font = Enum.Font.GothamBold
+stopAfkBtn.TextSize = 18
+stopAfkBtn.ZIndex = 101
+stopAfkBtn.Parent = afkFrame
+Instance.new("UICorner", stopAfkBtn).CornerRadius = UDim.new(0, 8)
+
+-- Vùng chứa trung tâm cho Menu và các Game
+local mgWrapper = Instance.new("Frame")
+mgWrapper.Size = UDim2.new(0, 340, 0, 480)
+mgWrapper.Position = UDim2.new(0.5, -170, 0.5, -240)
+mgWrapper.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+mgWrapper.ZIndex = 101
+mgWrapper.Parent = afkFrame
+Instance.new("UICorner", mgWrapper).CornerRadius = UDim.new(0, 12)
+
+-- MENU CHÍNH
+local menuFrame = Instance.new("Frame", mgWrapper)
+menuFrame.Size = UDim2.new(1, 0, 1, 0)
+menuFrame.BackgroundTransparency = 1
+
+local menuTitle = Instance.new("TextLabel", menuFrame)
+menuTitle.Size = UDim2.new(1, 0, 0, 60)
+menuTitle.BackgroundTransparency = 1
+menuTitle.Text = "Lựa Chọn Mini Game"
+menuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuTitle.Font = Enum.Font.GothamBold
+menuTitle.TextSize = 22
+
+local function createMenuButton(text, yPos, parent)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 260, 0, 60)
+    btn.Position = UDim2.new(0.5, -130, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 18
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    return btn
+end
+
+local btnGame1 = createMenuButton("🔢 Tìm Số (1-25)", 100, menuFrame)
+local btnGame2 = createMenuButton("🐍 Rắn Săn Mồi", 180, menuFrame)
+local btnGame3 = createMenuButton("🎯 Phản Xạ Nhanh", 260, menuFrame)
+
+-- GAME 1: TÌM SỐ
+local game1Frame = Instance.new("Frame", mgWrapper)
+game1Frame.Size = UDim2.new(1, 0, 1, 0)
+game1Frame.BackgroundTransparency = 1
+game1Frame.Visible = false
+
+local g1Title = Instance.new("TextLabel", game1Frame)
+g1Title.Size = UDim2.new(1, 0, 0, 40)
+g1Title.BackgroundTransparency = 1
+g1Title.Text = "Số cần bấm: 1"
+g1Title.TextColor3 = Color3.fromRGB(255, 200, 50)
+g1Title.Font = Enum.Font.GothamSemibold
+g1Title.TextSize = 20
+
+local g1BackBtn = Instance.new("TextButton", game1Frame)
+g1BackBtn.Size = UDim2.new(0, 100, 0, 30)
+g1BackBtn.Position = UDim2.new(0.5, -50, 1, -40)
+g1BackBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+g1BackBtn.Text = "< Quay lại"
+g1BackBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+g1BackBtn.Font = Enum.Font.GothamBold
+g1BackBtn.TextSize = 14
+Instance.new("UICorner", g1BackBtn).CornerRadius = UDim.new(0, 6)
+
+local g1Container = Instance.new("Frame", game1Frame)
+g1Container.Size = UDim2.new(0, 280, 0, 280)
+g1Container.Position = UDim2.new(0.5, -140, 0, 60)
+g1Container.BackgroundTransparency = 1
+local g1Grid = Instance.new("UIGridLayout", g1Container)
+g1Grid.CellSize = UDim2.new(0, 50, 0, 50)
+g1Grid.CellPadding = UDim2.new(0, 7, 0, 7)
+g1Grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local currentTargetNum = 1
+local minigameButtons = {}
+
+local function startGame1()
+    currentTargetNum = 1
+    g1Title.Text = "Số cần bấm: " .. currentTargetNum
+    for _, btn in ipairs(minigameButtons) do btn:Destroy() end
+    minigameButtons = {}
+    
+    local nums = {}
+    for i=1, 25 do table.insert(nums, i) end
+    for i = #nums, 2, -1 do
+        local j = math.random(i)
+        nums[i], nums[j] = nums[j], nums[i]
+    end
+    
+    for i=1, 25 do
+        local btn = Instance.new("TextButton")
+        btn.Text = tostring(nums[i])
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 20
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+        btn.Parent = g1Container
+        table.insert(minigameButtons, btn)
+        
+        btn.MouseButton1Click:Connect(function()
+            if tonumber(btn.Text) == currentTargetNum then
+                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+                btn.Active = false
+                currentTargetNum = currentTargetNum + 1
+                if currentTargetNum > 25 then
+                    g1Title.Text = "🎉 HOÀN THÀNH 🎉"
+                else
+                    g1Title.Text = "Số cần bấm: " .. currentTargetNum
+                end
+            else
+                local originalColor = btn.BackgroundColor3
+                btn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+                task.delay(0.2, function() btn.BackgroundColor3 = originalColor end)
+            end
+        end)
+    end
+end
+
+-- GAME 2: RẮN SĂN MỒI
+local game2Frame = Instance.new("Frame", mgWrapper)
+game2Frame.Size = UDim2.new(1, 0, 1, 0)
+game2Frame.BackgroundTransparency = 1
+game2Frame.Visible = false
+
+local g2Title = Instance.new("TextLabel", game2Frame)
+g2Title.Size = UDim2.new(1, 0, 0, 40)
+g2Title.BackgroundTransparency = 1
+g2Title.Text = "Điểm: 0"
+g2Title.TextColor3 = Color3.fromRGB(50, 255, 100)
+g2Title.Font = Enum.Font.GothamBold
+g2Title.TextSize = 20
+
+local g2BackBtn = Instance.new("TextButton", game2Frame)
+g2BackBtn.Size = UDim2.new(0, 100, 0, 30)
+g2BackBtn.Position = UDim2.new(0.5, -50, 1, -40)
+g2BackBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+g2BackBtn.Text = "< Quay lại"
+g2BackBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+g2BackBtn.Font = Enum.Font.GothamBold
+g2BackBtn.TextSize = 14
+Instance.new("UICorner", g2BackBtn).CornerRadius = UDim.new(0, 6)
+
+local snakeGridSize = 12
+local snakeCellPixels = 20
+local g2Container = Instance.new("Frame", game2Frame)
+g2Container.Size = UDim2.new(0, snakeGridSize * snakeCellPixels, 0, snakeGridSize * snakeCellPixels)
+g2Container.Position = UDim2.new(0.5, -(snakeGridSize * snakeCellPixels)/2, 0, 50)
+g2Container.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+
+-- Bảng nút di chuyển (Cho Mobile)
+local g2Controls = Instance.new("Frame", game2Frame)
+g2Controls.Size = UDim2.new(0, 120, 0, 120)
+g2Controls.Position = UDim2.new(0.5, -60, 1, -170)
+g2Controls.BackgroundTransparency = 1
+
+local function createArrowBtn(text, pos, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 40, 0, 40)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 18
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local btnUp = createArrowBtn("▲", UDim2.new(0.5, -20, 0, 0), g2Controls)
+local btnDown = createArrowBtn("▼", UDim2.new(0.5, -20, 1, -40), g2Controls)
+local btnLeft = createArrowBtn("◀", UDim2.new(0, 0, 0.5, -20), g2Controls)
+local btnRight = createArrowBtn("▶", UDim2.new(1, -40, 0.5, -20), g2Controls)
+
+local snakeRunning = false
+local snakeBody = {}
+local snakeDir = {x=1, y=0}
+local nextSnakeDir = {x=1, y=0}
+local snakeFood = {x=1, y=1}
+local g2Cells = {}
+local snakeScore = 0
+
+-- Tạo grid
+for y = 1, snakeGridSize do
+    g2Cells[y] = {}
+    for x = 1, snakeGridSize do
+        local cell = Instance.new("Frame")
+        cell.Size = UDim2.new(0, snakeCellPixels, 0, snakeCellPixels)
+        cell.Position = UDim2.new(0, (x-1)*snakeCellPixels, 0, (y-1)*snakeCellPixels)
+        cell.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        cell.BorderSizePixel = 1
+        cell.BorderColor3 = Color3.fromRGB(40, 40, 45)
+        cell.Parent = g2Container
+        g2Cells[y][x] = cell
+    end
+end
+
+local function drawSnake()
+    for y = 1, snakeGridSize do
+        for x = 1, snakeGridSize do
+            if x == snakeFood.x and y == snakeFood.y then
+                g2Cells[y][x].BackgroundColor3 = Color3.fromRGB(255, 50, 50) -- Food
+            else
+                g2Cells[y][x].BackgroundColor3 = Color3.fromRGB(30, 30, 35) -- BG
+            end
+        end
+    end
+    for i, part in ipairs(snakeBody) do
+        if part.y >= 1 and part.y <= snakeGridSize and part.x >= 1 and part.x <= snakeGridSize then
+            if i == 1 then
+                g2Cells[part.y][part.x].BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Head
+            else
+                g2Cells[part.y][part.x].BackgroundColor3 = Color3.fromRGB(50, 200, 50) -- Body
+            end
+        end
+    end
+end
+
+local function spawnFood()
+    local valid = false
+    while not valid do
+        snakeFood = {x = math.random(1, snakeGridSize), y = math.random(1, snakeGridSize)}
+        valid = true
+        for _, p in ipairs(snakeBody) do
+            if p.x == snakeFood.x and p.y == snakeFood.y then valid = false break end
+        end
+    end
+end
+
+local function resetSnake()
+    snakeBody = {{x=math.floor(snakeGridSize/2), y=math.floor(snakeGridSize/2)}}
+    snakeDir = {x=1, y=0}
+    nextSnakeDir = {x=1, y=0}
+    snakeScore = 0
+    g2Title.Text = "Điểm: " .. snakeScore
+    spawnFood()
+end
+
+local function startGame2()
+    snakeRunning = true
+    resetSnake()
+    task.spawn(function()
+        while snakeRunning do
+            snakeDir = nextSnakeDir
+            local head = snakeBody[1]
+            local nx, ny = head.x + snakeDir.x, head.y + snakeDir.y
+
+            -- Đụng tường hoặc đụng thân -> Thua
+            local dead = false
+            if nx < 1 or nx > snakeGridSize or ny < 1 or ny > snakeGridSize then dead = true end
+            for _, p in ipairs(snakeBody) do
+                if p.x == nx and p.y == ny then dead = true break end
+            end
+
+            if dead then
+                g2Title.Text = "GAME OVER! Điểm: " .. snakeScore
+                task.wait(1.5)
+                if snakeRunning then resetSnake() end
+            else
+                table.insert(snakeBody, 1, {x=nx, y=ny})
+                if nx == snakeFood.x and ny == snakeFood.y then
+                    snakeScore = snakeScore + 10
+                    g2Title.Text = "Điểm: " .. snakeScore
+                    spawnFood()
+                else
+                    table.remove(snakeBody)
+                end
+                drawSnake()
+            end
+            task.wait(0.2) -- Tốc độ rắn
+        end
+    end)
+end
+
+-- Controls Logic
+btnUp.MouseButton1Click:Connect(function() if snakeDir.y == 0 then nextSnakeDir = {x=0, y=-1} end end)
+btnDown.MouseButton1Click:Connect(function() if snakeDir.y == 0 then nextSnakeDir = {x=0, y=1} end end)
+btnLeft.MouseButton1Click:Connect(function() if snakeDir.x == 0 then nextSnakeDir = {x=-1, y=0} end end)
+btnRight.MouseButton1Click:Connect(function() if snakeDir.x == 0 then nextSnakeDir = {x=1, y=0} end end)
+
+-- GAME 3: PHẢN XẠ NHANH (Bắt bóng)
+local game3Frame = Instance.new("Frame", mgWrapper)
+game3Frame.Size = UDim2.new(1, 0, 1, 0)
+game3Frame.BackgroundTransparency = 1
+game3Frame.Visible = false
+
+local g3Title = Instance.new("TextLabel", game3Frame)
+g3Title.Size = UDim2.new(1, 0, 0, 40)
+g3Title.BackgroundTransparency = 1
+g3Title.Text = "Điểm: 0"
+g3Title.TextColor3 = Color3.fromRGB(50, 200, 255)
+g3Title.Font = Enum.Font.GothamBold
+g3Title.TextSize = 22
+
+local g3BackBtn = Instance.new("TextButton", game3Frame)
+g3BackBtn.Size = UDim2.new(0, 100, 0, 30)
+g3BackBtn.Position = UDim2.new(0.5, -50, 1, -40)
+g3BackBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+g3BackBtn.Text = "< Quay lại"
+g3BackBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+g3BackBtn.Font = Enum.Font.GothamBold
+g3BackBtn.TextSize = 14
+Instance.new("UICorner", g3BackBtn).CornerRadius = UDim.new(0, 6)
+
+local g3Container = Instance.new("Frame", game3Frame)
+g3Container.Size = UDim2.new(0, 280, 0, 320)
+g3Container.Position = UDim2.new(0.5, -140, 0, 60)
+g3Container.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Instance.new("UICorner", g3Container).CornerRadius = UDim.new(0, 8)
+
+local g3Target = Instance.new("TextButton", g3Container)
+g3Target.Size = UDim2.new(0, 40, 0, 40)
+g3Target.BackgroundColor3 = Color3.fromRGB(255, 50, 100)
+g3Target.Text = ""
+Instance.new("UICorner", g3Target).CornerRadius = UDim.new(1, 0) -- Circle
+
+local g3Score = 0
+local function relocateG3Target()
+    local maxX = 280 - 40
+    local maxY = 320 - 40
+    g3Target.Position = UDim2.new(0, math.random(0, maxX), 0, math.random(0, maxY))
+end
+
+local function startGame3()
+    g3Score = 0
+    g3Title.Text = "Điểm: 0"
+    relocateG3Target()
+end
+
+g3Target.MouseButton1Down:Connect(function()
+    g3Score = g3Score + 1
+    g3Title.Text = "Điểm: " .. g3Score
+    relocateG3Target()
+    -- Effect
+    local originalSize = g3Target.Size
+    g3Target.Size = UDim2.new(0, 50, 0, 50)
+    TweenService:Create(g3Target, TweenInfo.new(0.1), {Size = originalSize}):Play()
 end)
 
-toggleBtn.MouseLeave:Connect(function()
-    TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(100, 100, 100)}):Play()
-    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(25, 25, 30)}):Play()
-end)
+-- LOGIC CHUYỂN MENU & GAME
+local function hideAllGames()
+    menuFrame.Visible = true
+    game1Frame.Visible = false
+    game2Frame.Visible = false
+    game3Frame.Visible = false
+    snakeRunning = false
+end
 
-toggleBtn.MouseButton1Down:Connect(function()
-    TweenService:Create(frame, TweenInfo.new(0.1), {Size = UDim2.new(0, 170, 0, 50)}):Play()
-end)
+btnGame1.MouseButton1Click:Connect(function() menuFrame.Visible = false; game1Frame.Visible = true; startGame1() end)
+btnGame2.MouseButton1Click:Connect(function() menuFrame.Visible = false; game2Frame.Visible = true; startGame2() end)
+btnGame3.MouseButton1Click:Connect(function() menuFrame.Visible = false; game3Frame.Visible = true; startGame3() end)
 
-toggleBtn.MouseButton1Up:Connect(function()
-    TweenService:Create(frame, TweenInfo.new(0.1), {Size = UDim2.new(0, 180, 0, 55)}):Play()
-end)
+g1BackBtn.MouseButton1Click:Connect(hideAllGames)
+g2BackBtn.MouseButton1Click:Connect(hideAllGames)
+g3BackBtn.MouseButton1Click:Connect(hideAllGames)
 
--- Sửa lỗi tính năng kéo thả GUI cho PC
+
+-- ==========================================
+-- 2. KÉO THẢ GUI
+-- ==========================================
 local dragging, dragInput, dragStart, startPos
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
 
 frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -88,37 +550,71 @@ frame.InputChanged:Connect(function(input)
     end
 end)
 
+-- ==========================================
+-- KHAI BÁO CÁC HÀM CƠ BẢN TRƯỚC KHI DÙNG VÀO SỰ KIỆN KEYBOARD
+-- ==========================================
+local toggleFarmLogic -- Forward declaration
+
+-- Keyboard binding bao gồm cả Phím điều hướng trò rắn
 UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        -- Dùng Tween để kéo thả nhìn mượt hơn
-        TweenService:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-            Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        }):Play()
+        updateInput(input)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Xử lý bật/tắt menu
+    if not isMobile and input.KeyCode == toggleKey and toggleFarmLogic then
+        toggleFarmLogic()
+    end
+
+    -- Xử lý điều khiển Rắn (W A S D / Arrows)
+    if game2Frame.Visible and snakeRunning then
+        if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.Up then
+            if snakeDir.y == 0 then nextSnakeDir = {x=0, y=-1} end
+        elseif input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.Down then
+            if snakeDir.y == 0 then nextSnakeDir = {x=0, y=1} end
+        elseif input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.Left then
+            if snakeDir.x == 0 then nextSnakeDir = {x=-1, y=0} end
+        elseif input.KeyCode == Enum.KeyCode.D or input.KeyCode == Enum.KeyCode.Right then
+            if snakeDir.x == 0 then nextSnakeDir = {x=1, y=0} end
+        end
     end
 end)
 
 -- ==========================================
--- 2. DỮ LIỆU RƯƠNG VÀ GHI NHỚ VỊ TRÍ
+-- 3. BIẾN CƠ BẢN & ESP SETUP
 -- ==========================================
 local isFarming = false
-local MAX_SCAN_RADIUS = 10000000 -- Phạm vi quét cực đại toàn map
+local isDodging = false 
 local currentTween = nil
 local noclipConnection = nil
+local toggleKey = Enum.KeyCode.F 
 
--- Hàm random tốc độ, ưu tiên từ 350 trở xuống
-local function getRandomSpeed()
-    local chance = math.random(1, 100)
-    if chance <= 75 then
-        -- 75% cơ hội tốc độ nằm trong khoảng an toàn 250 - 350
-        return math.random(250, 350)
-    else
-        -- 25% cơ hội tốc độ bứt phá lên 351 - 1000
-        return math.random(351, 1000)
-    end
-end
+-- Cập nhật bán kính quét rương: 2500 stud
+local MAX_SCAN_RADIUS = 2500 
 
--- Danh sách các đảo để bay tới load map khi không thấy rương
+local isEspOn = false
+local activeEsps = {}
+local knownChests = {}
+
+-- Biến lưu trữ Spin
+local SPIN_SPEED = 1200
+local currentSpin = 0
+
+-- ESP UI Containers
+local espFolder = Instance.new("Folder")
+espFolder.Name = "ChestEspFolder"
+espFolder.Parent = screenGui.Parent -- Phải để ngoài ScreenGui thì BillboardGui mới nhận không gian 3D
+
+local linesFrame = Instance.new("Frame", screenGui)
+linesFrame.Name = "LinesFrame"
+linesFrame.BackgroundTransparency = 1
+linesFrame.Size = UDim2.new(1, 0, 1, 0)
+linesFrame.ZIndex = 0
+
 local islandCoords = {
     Vector3.new(2400, 21, -6500),
     Vector3.new(-5040.65, 314.56, -3007.66),
@@ -131,152 +627,325 @@ local islandCoords = {
     Vector3.new(-9500, 140, 5500)
 }
 
--- Bảng ghi nhớ rương đã quét: format { ["x,y,z"] = {position = Vector3, type = string, readyTime = number, cooldown = number} }
-local knownChests = {}
+if not isMobile then
+    keybindBox.FocusLost:Connect(function()
+        local text = keybindBox.Text:upper()
+        local success, keycode = pcall(function() return Enum.KeyCode[text] end)
+        if success and keycode then
+            toggleKey = keycode
+            keybindBox.Text = "Phím: " .. text
+        else
+            keybindBox.Text = "Phím: " .. toggleKey.Name
+        end
+    end)
+    keybindBox.Text = "Phím: " .. toggleKey.Name
+end
 
--- Chuyển vị trí thành chuỗi để làm ID cho rương
 local function getPosKey(pos)
     return math.floor(pos.X/5) .. "," .. math.floor(pos.Y/5) .. "," .. math.floor(pos.Z/5)
 end
 
--- Lấy vị trí rương
 local function getChestPosition(chest)
     if chest:IsA("BasePart") then return chest.Position end
     if chest:IsA("Model") and chest.PrimaryPart then return chest.PrimaryPart.Position end
     for _, part in ipairs(chest:GetDescendants()) do
-        if part:IsA("BasePart") then
-            return part.Position
-        end
+        if part:IsA("BasePart") then return part.Position end
     end
     return nil
 end
 
--- Phân loại rương và lấy thời gian hồi (Cooldown tính bằng giây)
 local function getChestInfo(name)
     name = string.lower(name)
-    if string.find(name, "chest 3") or string.find(name, "chest3") then
-        return "Diamond (Kim Cương)", 15 * 60
-    elseif string.find(name, "chest 2") or string.find(name, "chest2") then
-        return "Gold (Vàng)", 10 * 60
-    elseif string.find(name, "chest 1") or string.find(name, "chest1") or string.find(name, "chest") then
-        return "Silver (Bạc)", 5 * 60
+    if string.find(name, "chest 3") or string.find(name, "chest3") then return "Diamond", 15 * 60
+    elseif string.find(name, "chest 2") or string.find(name, "chest2") then return "Gold", 10 * 60
+    elseif string.find(name, "chest 1") or string.find(name, "chest1") or string.find(name, "chest") then return "Silver", 5 * 60
     end
     return nil, nil
 end
 
 -- ==========================================
--- 3. LOGIC BAY & QUÉT RƯƠNG GẦN NHẤT
+-- 4. LOGIC ESP XUYÊN TƯỜNG & VÒNG LẶP RENDER CẬP NHẬT SPIN
 -- ==========================================
-local function stopFlying()
-    isFarming = false
-    toggleBtn.Text = "AUTO CHEST: OFF"
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
-    uiStroke.Color = Color3.fromRGB(100, 100, 100)
+espBtn.MouseButton1Click:Connect(function()
+    isEspOn = not isEspOn
+    if isEspOn then
+        TweenService:Create(espBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 200, 80)}):Play()
+    else
+        TweenService:Create(espBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 50, 50)}):Play()
+    end
+end)
 
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
+local function getChestAdornee(chest)
+    if chest:IsA("BasePart") then return chest end
+    if chest:IsA("Model") and chest.PrimaryPart then return chest.PrimaryPart end
+    for _, part in ipairs(chest:GetDescendants()) do
+        if part:IsA("BasePart") then return part end
     end
-    
-    local char = player.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.Anchored = false
-    end
-    
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
-    end
-    print("[AutoChest] Đã TẮT bay!")
+    return nil
 end
 
-local function flyTo(targetPos)
+local function getChestColor(typeName)
+    if typeName == "Diamond" then return Color3.fromRGB(0, 200, 255)
+    elseif typeName == "Gold" then return Color3.fromRGB(255, 215, 0)
+    else return Color3.fromRGB(200, 200, 200) end
+end
+
+local function registerChestESP(chest, typeName, key)
+    if not activeEsps[chest] then
+        local adornee = getChestAdornee(chest)
+        if not adornee then return end
+
+        local color = getChestColor(typeName)
+
+        -- Tạo line nối từ màn hình
+        local line = Instance.new("Frame")
+        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.BackgroundColor3 = color
+        line.BorderSizePixel = 0
+        line.Visible = false
+        line.Parent = linesFrame
+
+        -- Tạo tên rương (BillboardGui)
+        local bb = Instance.new("BillboardGui")
+        bb.Adornee = adornee
+        bb.Size = UDim2.new(0, 100, 0, 20)
+        bb.AlwaysOnTop = true
+        bb.Enabled = false
+        
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1, 0, 1, 0)
+        txt.BackgroundTransparency = 1
+        txt.Text = typeName
+        txt.TextColor3 = color
+        txt.TextStrokeTransparency = 0
+        txt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        txt.Font = Enum.Font.GothamBold
+        txt.TextSize = 12
+        txt.Parent = bb
+        bb.Parent = espFolder
+
+        -- Lưu key để có thể đọc bộ nhớ cooldown từ knownChests
+        activeEsps[chest] = { line = line, billboard = bb, key = key }
+    end
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local bottomCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+    
     local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    -- THÊM LOGIC SPIN NHÂN VẬT (chạy độc lập, không cản trở di chuyển)
+    if isFarming and hrp then
+        currentSpin = (currentSpin + SPIN_SPEED * dt) % 360
+        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(currentSpin), 0)
+    end
+    
+    for chest, espObj in pairs(activeEsps) do
+        -- Kiểm tra xem rương đã bị farm (đang trong cooldown) chưa
+        local isReady = true
+        if espObj.key and knownChests[espObj.key] then
+            if tick() < knownChests[espObj.key].readyTime then
+                isReady = false
+            end
+        end
+
+        local pos = chest and chest.Parent and getChestPosition(chest)
+        local inRange = false
+        if hrp and pos then
+            if (pos - hrp.Position).Magnitude <= 2500 then
+                inRange = true
+            end
+        end
+
+        if not chest or not chest.Parent then
+            -- Rương bị xoá hẳn -> gỡ ESP
+            espObj.line:Destroy()
+            espObj.billboard:Destroy()
+            activeEsps[chest] = nil
+        elseif not isEspOn or not isReady or not inRange or not pos then
+            -- Nếu tắt ESP HOẶC rương chưa sẵn sàng HOẶC xa quá 2500 studs -> Ẩn ESP đi
+            espObj.line.Visible = false
+            espObj.billboard.Enabled = false
+        else
+            -- Hiển thị bình thường
+            local screenPos, onScreen = camera:WorldToViewportPoint(pos)
+            if onScreen then
+                espObj.line.Visible = true
+                espObj.billboard.Enabled = true
+
+                local chestScreenPos = Vector2.new(screenPos.X, screenPos.Y)
+                local distance = (bottomCenter - chestScreenPos).Magnitude
+                
+                espObj.line.Size = UDim2.new(0, distance, 0, 1)
+                espObj.line.Position = UDim2.new(0, (bottomCenter.X + chestScreenPos.X) / 2, 0, (bottomCenter.Y + chestScreenPos.Y) / 2)
+                espObj.line.Rotation = math.deg(math.atan2(chestScreenPos.Y - bottomCenter.Y, chestScreenPos.X - bottomCenter.X))
+            else
+                espObj.line.Visible = false
+                espObj.billboard.Enabled = false
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- 5. AUTO HAKI & XỬ LÝ NÉ ĐÒN
+-- ==========================================
+local function activateHaki()
+    task.wait(2) 
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.J, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.J, false, game)
+    end)
+    task.wait(0.5)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+end
+
+local function onCharacterAdded(char)
+    isDodging = false 
+    task.spawn(activateHaki)
+    
+    local humanoid = char:WaitForChild("Humanoid", 10)
+    if humanoid then
+        local lastHealth = humanoid.Health
+        humanoid.HealthChanged:Connect(function(newHealth)
+            -- ĐÃ FIX: Bổ sung điều kiện (newHealth > 0) để không né đòn khi đang chết
+            if newHealth > 0 and newHealth < lastHealth and isFarming and not isDodging then
+                isDodging = true
+                titleLabel.Text = "Bị đánh! Đang né đòn..."
+                
+                if currentTween then currentTween:Cancel() end
+                
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Anchored = true 
+                    -- Né đòn: Bay lên Y + 200
+                    local dodgePos = hrp.Position + Vector3.new(0, 200, 0) 
+                    local dodgeTween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Sine), {CFrame = CFrame.new(dodgePos)})
+                    currentTween = dodgeTween
+                    dodgeTween:Play()
+                    
+                    task.spawn(function()
+                        dodgeTween.Completed:Wait()
+                        -- Chờ 1 giây trên không trung
+                        task.wait(1) 
+                        isDodging = false 
+                    end)
+                else
+                    isDodging = false
+                end
+            end
+            lastHealth = newHealth
+        end)
+    end
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+if player.Character then
+    task.spawn(function() onCharacterAdded(player.Character) end)
+end
+
+-- ==========================================
+-- 6. LOGIC BAY & TÌM RƯƠNG
+-- ==========================================
+local function flyTo(targetPos, isIslandHop)
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
     local hrp = char.HumanoidRootPart
 
-    local goalPos = targetPos + Vector3.new(0, 3, 0) -- Đích đến cao hơn rương 3 stud
-    local CHUNK_DISTANCE = 300 -- Cập nhật vị trí mỗi 300m
+    local goalPos = targetPos + Vector3.new(0, 3, 0)
+    local CHUNK_DISTANCE = 300
+    local initialDistance = (hrp.Position - goalPos).Magnitude
 
-    -- Vòng lặp chia nhỏ đường bay thành nhiều chặng
     while isFarming do
-        local currentPos = hrp.Position
-        local distanceLeft = (currentPos - goalPos).Magnitude
-        
-        -- Nếu đã đến đủ gần rương (cách dưới 3 stud), thoát vòng lặp chặng bay
-        if distanceLeft <= 3 then
-            break
+        -- Đảm bảo nếu nhân vật chết lúc đang bay, vòng lặp bay sẽ huỷ để reset an toàn
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or player.Character.Humanoid.Health <= 0 then
+            return false 
         end
 
-        -- Bật lại Noclip khi bắt đầu chặng bay mới
-        if not noclipConnection then
-            noclipConnection = RunService.Stepped:Connect(function()
-                if player.Character then
-                    for _, part in ipairs(player.Character:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
+        -- ĐÃ FIX CÚ PHÁP: Thay thế lệnh continue bằng cấu trúc if-else để tương thích 100% executor
+        if isDodging then
+            task.wait(0.1)
+        else
+            local currentPos = hrp.Position
+            local distanceLeft = (currentPos - goalPos).Magnitude
+            
+            if distanceLeft <= 3 then break end
+
+            if not noclipConnection then
+                noclipConnection = RunService.Stepped:Connect(function()
+                    if player.Character then
+                        for _, part in ipairs(player.Character:GetDescendants()) do
+                            if part:IsA("BasePart") and part.CanCollide then
+                                part.CanCollide = false
+                            end
                         end
                     end
-                end
-            end)
-        end
-
-        hrp.Anchored = true 
-        
-        -- Tính toán điểm đến của chặng bay này (không vượt quá 300 stud)
-        local stepDist = math.min(CHUNK_DISTANCE, distanceLeft)
-        local direction = (goalPos - currentPos).Unit
-        local nextWaypoint = currentPos + (direction * stepDist)
-
-        -- Áp dụng tốc độ ngẫu nhiên cho chặng này
-        local currentSpeed = getRandomSpeed()
-        local timeToTravel = stepDist / currentSpeed
-        local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear)
-        
-        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
-        currentTween:Play()
-        
-        local completed = false
-        local conn
-        conn = currentTween.Completed:Connect(function()
-            completed = true
-        end)
-
-        while not completed and isFarming do
-            task.wait()
-        end
-
-        if conn then conn:Disconnect() end
-
-        if not isFarming then break end
-
-        -- Cứ mỗi 300 stud, giả vờ tắt vật lý để server cập nhật vị trí chống báo lỗi
-        if distanceLeft > CHUNK_DISTANCE then
-            hrp.Anchored = false
-            if noclipConnection then
-                noclipConnection:Disconnect()
-                noclipConnection = nil
+                end)
             end
-            -- Dừng 0.1 giây để nhân vật có tương tác rơi vật lý nhẹ, game sẽ ghi nhận vị trí
-            task.wait(0.1) 
+
+            hrp.Anchored = true 
+            local stepDist = math.min(CHUNK_DISTANCE, distanceLeft)
+            local direction = (goalPos - currentPos).Unit
+            local nextWaypoint = currentPos + (direction * stepDist)
+
+            -- ĐÃ FIX LỖI NƯỚC BIỂN: Khi còn cách xa rương trên 50 stud, luôn ép độ cao là Y = 30 (Tuyệt đối an toàn khỏi nước biển)
+            if distanceLeft > 50 and nextWaypoint.Y < 30 then
+                nextWaypoint = Vector3.new(nextWaypoint.X, 30, nextWaypoint.Z)
+            end
+
+            -- Tốc độ dựa trên khoảng cách: > 2500 stud thì dùng 350, nhặt rương gần dùng ngẫu nhiên 750-1000
+            local currentSpeed
+            if initialDistance > 2500 or isIslandHop then
+                currentSpeed = 350
+            else
+                currentSpeed = math.random(750, 1000)
+            end
+            
+            local timeToTravel = stepDist / currentSpeed
+            local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear)
+            
+            currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
+            currentTween:Play()
+            
+            local completed = false
+            local conn
+            conn = currentTween.Completed:Connect(function(state) 
+                completed = true 
+            end)
+
+            while not completed and isFarming and not isDodging do task.wait() end
+            if conn then conn:Disconnect() end
+
+            if not isFarming then break end
+
+            if not isDodging and distanceLeft > CHUNK_DISTANCE then
+                hrp.Anchored = false
+                if noclipConnection then
+                    noclipConnection:Disconnect()
+                    noclipConnection = nil
+                end
+                task.wait(0.1) 
+            end
         end
     end
 
-    -- ========================================================
-    -- [MỚI]: KHI ĐẾN NƠI, TRẢ LẠI VẬT LÝ ĐỂ NHÂN VẬT RƠI XUỐNG
-    -- ========================================================
     if isFarming and char and char:FindFirstChild("HumanoidRootPart") then
-        hrp.Anchored = false -- Tắt neo
-        if noclipConnection then
-            noclipConnection:Disconnect() -- Tắt xuyên tường
-            noclipConnection = nil
-        end
-        -- Đợi 0.5 giây để nhân vật có đủ thời gian rơi tự do chạm vào rương
+        hrp.Anchored = false
+        if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
         task.wait(0.5)
     end
+    
+    return true 
 end
 
--- Cập nhật danh sách rương hiện có trên bản đồ vào bộ nhớ
 local function scanAndUpdateChests()
     for _, obj in ipairs(workspace:GetDescendants()) do
         local typeName, cooldown = getChestInfo(obj.Name)
@@ -285,38 +954,42 @@ local function scanAndUpdateChests()
             if pos then
                 local key = getPosKey(pos)
                 if not knownChests[key] then
-                    knownChests[key] = {
-                        position = pos,
-                        type = typeName,
-                        cooldown = cooldown,
-                        readyTime = 0 
-                    }
+                    knownChests[key] = { position = pos, type = typeName, cooldown = cooldown, readyTime = 0 }
                 end
+                -- Cấp phát ESP dựa vào ID key của bộ nhớ
+                registerChestESP(obj, typeName, key)
             end
         end
     end
 end
 
--- Tìm rương sẵn sàng nhặt và ở gần nhất
-local function getNearestAvailableChest()
+-- TỰ ĐỘNG REFRESH ESP/QUÉT RƯƠNG MỖI 5 GIÂY
+task.spawn(function()
+    while true do
+        task.wait(5)
+        pcall(function()
+            scanAndUpdateChests()
+        end)
+    end
+end)
+
+-- CẬP NHẬT: Nhận tham số originPos. Quét rương trong vòng 2500 stud từ originPos
+local function getNearestAvailableChest(originPos)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
-    local hrpPos = char.HumanoidRootPart.Position
+    
+    -- Ưu tiên lấy tâm quét là originPos (vị trí rương cũ), nếu không có mới lấy vị trí nhân vật
+    local scanOrigin = originPos or char.HumanoidRootPart.Position
 
-    -- Quét toàn bộ map đã load
     scanAndUpdateChests()
 
-    local nearestKey = nil
-    local nearestData = nil
+    local nearestKey, nearestData = nil, nil
     local minDistance = math.huge
     local currentTime = tick()
 
     for key, data in pairs(knownChests) do
-        -- Kiểm tra thời gian hồi sinh
         if currentTime >= data.readyTime then
-            local dist = (data.position - hrpPos).Magnitude
-            
-            -- Lọc các rương nằm trong phạm vi cực đại 10.000.000 mét
+            local dist = (data.position - scanOrigin).Magnitude
             if dist < minDistance and dist <= MAX_SCAN_RADIUS then
                 minDistance = dist
                 nearestKey = key
@@ -325,67 +998,92 @@ local function getNearestAvailableChest()
         end
     end
 
-    if nearestKey then
-        return {key = nearestKey, data = nearestData}
-    end
+    if nearestKey then return {key = nearestKey, data = nearestData} end
     return nil
 end
 
--- Vòng lặp chính
-local function startFarming()
+-- ==========================================
+-- 7. VÒNG LẶP START/STOP FARMING
+-- ==========================================
+
+local function stopFarming()
+    isFarming = false
+    isDodging = false
+    
+    afkFrame.Visible = false -- Tắt màn hình AFK
+    hideAllGames() -- Dừng mọi trò chơi
+    
+    toggleBtn.Text = "BẬT AUTO CHEST"
+    TweenService:Create(toggleBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(220, 50, 50)}):Play()
+    TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(60, 60, 70)}):Play()
+    titleLabel.Text = "🍎 Auto Chest V2"
+
+    if currentTween then currentTween:Cancel() currentTween = nil end
+    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
+    
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.Anchored = false
+        -- Reset góc quay để nhân vật không bị nằm chéo khi tắt Auto
+        char.HumanoidRootPart.CFrame = CFrame.new(char.HumanoidRootPart.Position) 
+    end
+end
+
+local function startFarmingLoop()
     task.spawn(function()
-        print("[AutoChest] Bắt đầu quét map với bán kính " .. MAX_SCAN_RADIUS .. " mét...")
+        -- Khởi tạo biến lưu toạ độ rương vừa nhặt để quét tiếp
+        local lastChestPosition = nil
+        
         while isFarming do
-            local targetChest = getNearestAvailableChest()
-            
-            if targetChest then
-                print("[AutoChest] Đang bay đến rương " .. targetChest.data.type .. "...")
-                flyTo(targetChest.data.position)
-                
-                if not isFarming then break end
-
-                -- Chờ thêm một chút nữa sau khi rơi trúng để game xác nhận việc nhặt thành công
-                task.wait(0.5) 
-                
-                -- Cập nhật thời gian hồi lại của rương này
-                knownChests[targetChest.key].readyTime = tick() + targetChest.data.cooldown
-                print("[AutoChest] Đã thu thập rương " .. targetChest.data.type .. ". Hồi sinh sau " .. (targetChest.data.cooldown / 60) .. " phút.")
+            -- ĐÃ FIX CƠ CHẾ AUTO RESUME: Đợi an toàn khi nhân vật chết mà không làm hỏng vòng lặp
+            local char = player.Character
+            if not char or not char:FindFirstChild("HumanoidRootPart") or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0) then
+                titleLabel.Text = "Đang chờ hồi sinh..."
+                task.wait(1)
             else
-                -- Khu vực xung quanh hết rương -> Thực hiện nhảy đảo để load map mới
-                local char = player.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    local hrpPos = char.HumanoidRootPart.Position
+                while isDodging do task.wait(0.5) end
+                
+                titleLabel.Text = "Đang tìm rương quanh đây..."
+                local targetChest = getNearestAvailableChest(lastChestPosition)
+                
+                if targetChest then
+                    titleLabel.Text = "Đang nhặt: " .. targetChest.data.type
+                    local success = flyTo(targetChest.data.position, false)
                     
-                    local bestIsland = nil
-                    local bestDist = math.huge
+                    if not success then
+                        titleLabel.Text = "Tạm bỏ rương, tìm rương khác..."
+                        knownChests[targetChest.key].readyTime = tick() + 60
+                        lastChestPosition = nil -- Reset tâm quét về lại nhân vật
+                    else
+                        if not isFarming then break end
+                        task.wait(0.5) 
+                        -- Đặt cooldown (Ghi vào bộ nhớ rương đã được farm)
+                        knownChests[targetChest.key].readyTime = tick() + targetChest.data.cooldown
+                        
+                        -- LƯU VỊ TRÍ VỪA NHẶT làm tâm quét cho vòng lặp tiếp theo
+                        lastChestPosition = targetChest.data.position
+                    end
+                else
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        -- Reset vị trí quét cũ vì đã hết rương quanh đây, chuẩn bị sang đảo mới
+                        lastChestPosition = nil 
+                        
+                        -- Chuyển đổi đảo ngẫu nhiên
+                        local targetIsland = islandCoords[math.random(1, #islandCoords)]
+                        
+                        titleLabel.Text = "Đang đổi đảo chờ rương..."
+                        flyTo(targetIsland, true)
+                        
+                        if not isFarming then break end
 
-                    -- Tìm đảo gần nhất nhưng phải cách xa vị trí hiện tại trên 1500m (để tránh đứng im 1 chỗ)
-                    for _, islandPos in ipairs(islandCoords) do
-                        local dist = (islandPos - hrpPos).Magnitude
-                        if dist < bestDist and dist > 1500 then
-                            bestDist = dist
-                            bestIsland = islandPos
+                        local waitTime = math.random(5, 10)
+                        titleLabel.Text = "Đang chờ load rương..."
+                        
+                        local elapsed = 0
+                        while isFarming and elapsed < waitTime do
+                            task.wait(1)
+                            elapsed = elapsed + 1
                         end
-                    end
-
-                    -- Nếu không tìm được đảo nào hợp lệ (hiếm gặp), chọn ngẫu nhiên
-                    if not bestIsland then
-                        bestIsland = islandCoords[math.random(1, #islandCoords)]
-                    end
-                    
-                    print("[AutoChest] Hết rương! Đang di chuyển sang đảo khác để tải thêm bản đồ...")
-                    flyTo(bestIsland)
-                    
-                    if not isFarming then break end
-
-                    -- Đợi ngẫu nhiên 5-10 giây để game load các khối (chunks) và rương
-                    local waitTime = math.random(5, 10)
-                    print("[AutoChest] Đã đến khu vực mới, chờ " .. waitTime .. " giây để load rương...")
-                    
-                    local elapsed = 0
-                    while isFarming and elapsed < waitTime do
-                        task.wait(1)
-                        elapsed = elapsed + 1
                     end
                 end
             end
@@ -394,16 +1092,41 @@ local function startFarming()
 end
 
 -- ==========================================
--- 4. XỬ LÝ NÚT BẤM
+-- 8. KẾT NỐI SỰ KIỆN CLICK & BÀN PHÍM CHÍNH
 -- ==========================================
-toggleBtn.MouseButton1Click:Connect(function()
-    if isFarming then
-        stopFlying()
-    else
+-- Định nghĩa hàm toggle ở đây (đã forward declare ở trên)
+toggleFarmLogic = function(forceStart)
+    if forceStart == true then
         isFarming = true
-        toggleBtn.Text = "AUTO CHEST: ON"
-        toggleBtn.TextColor3 = Color3.fromRGB(70, 255, 70)
-        uiStroke.Color = Color3.fromRGB(70, 255, 70)
-        startFarming()
+    elseif forceStart == false then
+        isFarming = false
+    else
+        isFarming = not isFarming
     end
+
+    if isFarming then
+        afkFrame.Visible = true -- Hiện màn hình AFK
+        hideAllGames() -- Reset về màn hình chọn Menu Game
+        
+        toggleBtn.Text = "ĐANG AUTO..."
+        TweenService:Create(toggleBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(50, 200, 80)}):Play()
+        TweenService:Create(uiStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(50, 200, 80)}):Play()
+        startFarmingLoop()
+    else
+        stopFarming()
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(function() 
+    toggleFarmLogic() 
+end)
+
+-- Sự kiện nhấn nút "TẮT AUTO & ĐÓNG" trên màn hình AFK
+stopAfkBtn.MouseButton1Click:Connect(function()
+    toggleFarmLogic(false)
+end)
+
+task.spawn(function()
+    task.wait(3)
+    toggleFarmLogic(true)
 end)
