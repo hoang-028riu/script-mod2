@@ -66,34 +66,42 @@ local function AutoExecuteOnTeleport(scriptString)
 end
 
 -- ================================================================= --
--- CÁCH SỬ DỤNG: KẾT HỢP INFINITE YIELD & BLOX FRUITS SCRIPT
+-- DANH SÁCH CÁC SCRIPT KẾT HỢP (IY + BLOX FRUITS + CHEST FARM)
 -- ================================================================= --
 
 -- 1. Script Infinite Yield
 local IY_Script = [[
     loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
 ]]
-AutoExecuteOnTeleport(IY_Script) -- Đưa vào hàng đợi cho server tiếp theo
 
--- 2. Script Blox Fruits của bạn
+-- 2. Script Blox Fruits Menu
 local BloxFruits_Script = [[
     loadstring(game:HttpGet("https://raw.githubusercontent.com/hoang-028riu/script-mod2/refs/heads/main/bloxfruitscriptmenu.lua"))()
 ]]
-AutoExecuteOnTeleport(BloxFruits_Script) -- Đưa vào hàng đợi cho server tiếp theo
+
+-- 3. Script Chest Farm
+local ChestFarm_Script = [[
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/hoang-028riu/script-mod2/refs/heads/main/chest%20farm"))()
+]]
+
+-- Đưa tất cả vào hàng đợi cho server tiếp theo
+AutoExecuteOnTeleport(IY_Script)
+AutoExecuteOnTeleport(BloxFruits_Script)
+AutoExecuteOnTeleport(ChestFarm_Script)
 
 -- ================================================================= --
--- CHẠY SCRIPT NGAY Ở SERVER HIỆN TẠI
--- (Bọc trong pcall và task.spawn để 2 script không chờ nhau hay làm lỗi nhau)
+-- CHẠY TẤT CẢ SCRIPT NGAY TẠI SERVER HIỆN TẠI
 -- ================================================================= --
 
-task.spawn(function()
-    pcall(function()
-        loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+local function ExecuteScript(code)
+    task.spawn(function()
+        local success, err = pcall(function()
+            loadstring(code)()
+        end)
+        if not success then warn("Lỗi khởi chạy script:", err) end
     end)
-end)
+end
 
-task.spawn(function()
-    pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/hoang-028riu/script-mod2/refs/heads/main/bloxfruitscriptmenu.lua"))()
-    end)
-end)
+ExecuteScript(IY_Script)
+ExecuteScript(BloxFruits_Script)
+ExecuteScript(ChestFarm_Script)
