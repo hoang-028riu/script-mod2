@@ -1,0 +1,1148 @@
+--[[
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- CẤU HÌNH BIẾN TOÀN CỤC (GLOBAL CONFIGS)
+-- ==========================================
+local Config = {
+	-- Trạng thái chính
+	IsPulling = false,
+	TargetPart = "HumanoidRootPart",
+	PositionMode = "Trước mặt",
+	WeaponType = "Melee", -- "Melee" hoặc "Gun"
+	
+	-- Cài đặt kéo trượt (Sliders)
+	Radius = 150,
+	MobDistance = 3, -- Melee: 3 studs, Gun: 7 studs
+	WalkSpeed = 16,
+	JumpPower = 50,
+	HeightOffset = 20, -- Khoảng cách cộng thêm từ mặt đất
+	
+	-- Các tự động hóa
+	AutoRespawn = false,
+	AutoReturn = false,
+	AimHead = true,
+	AutoFire = true,
+	LoopSpeed = true,   -- Luôn luôn bật
+	LoopJump = true,    -- Luôn luôn bật
+	
+	-- Noclip & Anti-AFK & Auto Loot
+	NoclipEnabled = false,
+	AntiAFKEnabled = true, 
+	AutoLootCrates = false, 
+	
+	-- ESP
+	EspLine = false,
+	EspBox = false,
+	EspHighlight = false,
+	
+	-- Trạng thái lưu trữ tạm thời
+	LastDeathPosition = nil,
+	CurrentSpawnY = 0, -- Độ cao Y động
+	CurrentFarmLocationName = "Chưa Chọn"
+}
+
+local cachedNPCs = {}
+local espInstances = {}
+local noclipConnection = nil
+
+local hasChosenWeapon = false 
+local isOverlayActive = false -- Biến trạng thái dùng để bật/tắt Auto Click động khi có thông báo
+
+-- Tọa độ Map
+local Locations = {
+	{Name = "NHÀ", Position = Vector3.new(-44.26, 5.21, -23.86)},
+	{Name = "RỪNG THƯỜNG", Position = Vector3.new(-532.48, 3.13, 2.49)},
+	{Name = "HANG ĐỘNG", Position = Vector3.new(-870.57, 3.00, 0.50)}
+}
+
+-- ==========================================
+-- HỆ THỐNG MÀU CHỦ ĐỀ & HIỆU ỨNG (THEMES & EFFECTS)
+-- ==========================================
+local ThemesList = {
+	["Crimson Red"] = Color3.fromRGB(210, 15, 25),
+	["Neon Blue"] = Color3.fromRGB(0, 180, 255),
+	["Emerald Green"] = Color3.fromRGB(0, 220, 100),
+	["Void Purple"] = Color3.fromRGB(160, 30, 240),
+	["Golden Amber"] = Color3.fromRGB(240, 160, 10)
+}
+
+local SelectedThemeColor = ThemesList["Crimson Red"]
+local ThemeElements = {} -- Danh sách chứa các UI Object cần đổi màu theo chủ đề
+
+local Theme = {
+	MainBG = Color3.fromRGB(15, 15, 15),
+	TabBG = Color3.fromRGB(24, 24, 24),
+	Text = Color3.fromRGB(255, 255, 255),
+	TextDark = Color3.fromRGB(140, 140, 140)
+}
+
+-- Hàm cập nhật màu chủ đề mượt mà cho toàn bộ giao diện
+local function updateThemeColor(newColor)
+	SelectedThemeColor = newColor
+	for element, prop in pairs(ThemeElements) do
+		if element and element.Parent then
+			pcall(function()
+				local tInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+				local tween = TweenService:Create(element, tInfo, {[prop] = newColor})
+				tween:Play()
+			end)
+		else
+			ThemeElements[element] = nil
+		end
+	end
+end
+
+-- Hàm đăng ký một UI Element để tự động thay đổi màu chủ đề
+local function registerThemeElement(object, property)
+	ThemeElements[object] = property
+	object[property] = SelectedThemeColor
+end
+
+-- ==========================================
+-- HÀM TRANG BỊ VÀ THẢ VŨ KHÍ TRỰC TIẾP TRÊN MOBILE
+-- ==========================================
+local function equipWeaponLogic()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	
+	-- Tìm kiếm công cụ (Tool) đầu tiên trong balo để cầm ra
+	local tool = LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+	if tool then
+		hum:EquipTool(tool)
+	else
+		-- Nếu đang cầm thì cất vũ khí đi
+		hum:UnequipTools()
+	end
+end
+
+-- ==========================================
+-- GIAO DIỆN CHÍNH & MÀN HÌNH CHỜ (LOADING SCREEN)
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SupremeRedHub_Mobile"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+
+-- Màn hình Fake Loading
+local loadingScreen = Instance.new("Frame")
+loadingScreen.Size = UDim2.new(1, 0, 1, 0)
+loadingScreen.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+loadingScreen.ZIndex = 999
+loadingScreen.Parent = screenGui
+
+local loadingGradient = Instance.new("UIGradient")
+loadingGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 15)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(5, 5, 5)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 15))
+})
+loadingGradient.Parent = loadingScreen
+
+local spinner = Instance.new("ImageLabel")
+spinner.Size = UDim2.new(0, 70, 0, 70)
+spinner.Position = UDim2.new(0.5, -35, 0.4, -35)
+spinner.BackgroundTransparency = 1
+spinner.Image = "rbxassetid://6030561937" 
+spinner.ImageColor3 = SelectedThemeColor
+spinner.ZIndex = 1000
+spinner.Parent = loadingScreen
+registerThemeElement(spinner, "ImageColor3")
+
+local loadTitle = Instance.new("TextLabel")
+loadTitle.Size = UDim2.new(1, 0, 0, 30)
+loadTitle.Position = UDim2.new(0, 0, 0.55, 0)
+loadTitle.BackgroundTransparency = 1
+loadTitle.Text = "SUPREME MOBILE"
+loadTitle.TextColor3 = Theme.Text
+loadTitle.Font = Enum.Font.GothamBlack
+loadTitle.TextSize = 20
+loadTitle.ZIndex = 1000
+loadTitle.Parent = loadingScreen
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0.62, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Đang cấu hình Mobile UI..."
+statusLabel.TextColor3 = SelectedThemeColor
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 12
+statusLabel.ZIndex = 1000
+statusLabel.Parent = loadingScreen
+registerThemeElement(statusLabel, "TextColor3")
+
+local progressBarBG = Instance.new("Frame")
+progressBarBG.Size = UDim2.new(0, 260, 0, 6)
+progressBarBG.Position = UDim2.new(0.5, -130, 0.7, 0)
+progressBarBG.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+progressBarBG.ZIndex = 1000
+progressBarBG.Parent = loadingScreen
+Instance.new("UICorner", progressBarBG).CornerRadius = UDim.new(1, 0)
+
+local progressBarFill = Instance.new("Frame")
+progressBarFill.Size = UDim2.new(0, 0, 1, 0)
+progressBarFill.BackgroundColor3 = SelectedThemeColor
+progressBarFill.ZIndex = 1000
+progressBarFill.Parent = progressBarBG
+Instance.new("UICorner", progressBarFill).CornerRadius = UDim.new(1, 0)
+registerThemeElement(progressBarFill, "BackgroundColor3")
+
+-- Xoay vòng loading
+local rotationConnection
+rotationConnection = RunService.RenderStepped:Connect(function(dt)
+	if spinner and spinner.Parent then
+		spinner.Rotation = spinner.Rotation + (180 * dt)
+	else
+		rotationConnection:Disconnect()
+	end
+end)
+
+-- Hiệu ứng tải ảo
+task.spawn(function()
+	local steps = {
+		{Prog = 0.20, Msg = "Khởi động tối ưu hóa điện thoại..."},
+		{Prog = 0.50, Msg = "Đang nạp bộ giả lập chạm cảm ứng..."},
+		{Prog = 0.75, Msg = "Đang căn chỉnh tỷ lệ khung hình di động..."},
+		{Prog = 1.00, Msg = "Khởi chạy Supreme Mobile thành công!"}
+	}
+	
+	for _, step in ipairs(steps) do
+		local tInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local tween = TweenService:Create(progressBarFill, tInfo, {Size = UDim2.new(step.Prog, 0, 1, 0)})
+		tween:Play()
+		statusLabel.Text = step.Msg
+		task.wait(0.4)
+	end
+	
+	local fadeTween = TweenService:Create(loadingScreen, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
+	fadeTween:Play()
+	
+	for _, child in ipairs(loadingScreen:GetChildren()) do
+		if child:IsA("TextLabel") or child:IsA("ImageLabel") or child:IsA("Frame") then
+			pcall(function()
+				TweenService:Create(child, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1}):Play()
+			end)
+		end
+	end
+	
+	fadeTween.Completed:Connect(function()
+		loadingScreen:Destroy()
+	end)
+end)
+
+-- ==========================================
+-- GIAO DIỆN PANEL ĐIỀU KHIỂN CHÍNH
+-- ==========================================
+local overlayFrame = Instance.new("Frame")
+overlayFrame.Size = UDim2.new(1, 0, 1, 0)
+overlayFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+overlayFrame.BackgroundTransparency = 1 
+overlayFrame.Visible = false
+overlayFrame.ZIndex = 80
+overlayFrame.Parent = screenGui
+
+local noticeLabel = Instance.new("TextLabel")
+noticeLabel.Size = UDim2.new(0, 260, 0, 45)
+noticeLabel.Position = UDim2.new(0.02, 0, 0.02, 0)
+noticeLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+noticeLabel.BackgroundTransparency = 0.2
+noticeLabel.Text = "Bạn có muốn tắt không?\nHãy chạm phím ảo [F] để tắt."
+noticeLabel.TextColor3 = Theme.Text
+pcall(function() noticeLabel.Font = Enum.Font.GothamBold end)
+noticeLabel.TextSize = 11
+noticeLabel.Visible = false
+noticeLabel.ZIndex = 102
+noticeLabel.Parent = screenGui
+
+local noticeCorner = Instance.new("UICorner")
+noticeCorner.CornerRadius = UDim.new(0, 6)
+noticeCorner.Parent = noticeLabel
+
+local noticeStroke = Instance.new("UIStroke")
+noticeStroke.Color = SelectedThemeColor
+noticeStroke.Thickness = 1
+noticeStroke.Parent = noticeLabel
+registerThemeElement(noticeStroke, "Color")
+
+-- Logo tròn mini chính
+local logoBtn = Instance.new("TextButton")
+logoBtn.Size = UDim2.new(0, 50, 0, 50)
+logoBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+logoBtn.BackgroundColor3 = Theme.MainBG
+logoBtn.Text = "SRH"
+logoBtn.TextColor3 = SelectedThemeColor
+pcall(function() logoBtn.Font = Enum.Font.GothamBold end)
+logoBtn.TextSize = 16
+logoBtn.ZIndex = 101
+logoBtn.Parent = screenGui
+registerThemeElement(logoBtn, "TextColor3")
+
+local logoCorner = Instance.new("UICorner")
+logoCorner.CornerRadius = UDim.new(1, 0)
+logoCorner.Parent = logoBtn
+
+local logoStroke = Instance.new("UIStroke")
+logoStroke.Color = SelectedThemeColor
+logoStroke.Thickness = 2
+logoStroke.Parent = logoBtn
+registerThemeElement(logoStroke, "Color")
+
+-- [MỚI - ĐẶC BIỆT CHO MOBILE] NÚT NỔI PHÍM F CHẠM NHANH (Floating F Action Button)
+local floatFButton = Instance.new("TextButton")
+floatFButton.Size = UDim2.new(0, 45, 0, 45)
+floatFButton.Position = UDim2.new(0.85, 0, 0.25, 0)
+floatFButton.BackgroundColor3 = Theme.MainBG
+floatFButton.Text = "F"
+floatFButton.TextColor3 = SelectedThemeColor
+pcall(function() floatFButton.Font = Enum.Font.GothamBlack end)
+floatFButton.TextSize = 18
+floatFButton.ZIndex = 120
+floatFButton.Parent = screenGui
+registerThemeElement(floatFButton, "TextColor3")
+
+local floatFCorner = Instance.new("UICorner")
+floatFCorner.CornerRadius = UDim.new(1, 0)
+floatFCorner.Parent = floatFButton
+
+local floatFStroke = Instance.new("UIStroke")
+floatFStroke.Color = SelectedThemeColor
+floatFStroke.Thickness = 2.5
+floatFStroke.Parent = floatFButton
+registerThemeElement(floatFStroke, "Color")
+
+-- Menu chính (Được thiết kế nhỏ hơn: 360x280 để thân thiện với màn hình di động ngang/dọc)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 360, 0, 280)
+mainFrame.Position = UDim2.new(0.5, -180, 0.5, -140)
+mainFrame.BackgroundColor3 = Theme.MainBG
+mainFrame.Visible = false
+mainFrame.Active = true
+mainFrame.ZIndex = 100
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = SelectedThemeColor
+mainStroke.Thickness = 1.5
+mainStroke.Parent = mainFrame
+registerThemeElement(mainStroke, "Color")
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 35)
+title.Position = UDim2.new(0, 15, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "🔥 SUPREME MOBILE 🔥"
+title.TextColor3 = SelectedThemeColor
+pcall(function() title.Font = Enum.Font.GothamBlack end)
+title.TextSize = 16
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 101
+title.Parent = mainFrame
+registerThemeElement(title, "TextColor3")
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -40, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Theme.Text
+pcall(function() closeBtn.Font = Enum.Font.GothamBold end)
+closeBtn.TextSize = 18
+closeBtn.ZIndex = 101
+closeBtn.Parent = mainFrame
+
+-- Bật tính năng kéo thả mượt mà cho cả 3 nút điều hướng của Mobile
+local function makeDraggable(guiObject)
+	local dragging, dragInput, dragStart, startPos
+	guiObject.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true dragStart = input.Position startPos = guiObject.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	guiObject.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+makeDraggable(logoBtn)
+makeDraggable(floatFButton)
+makeDraggable(mainFrame)
+
+logoBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = true
+	logoBtn.Visible = false
+end)
+closeBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = false
+	logoBtn.Visible = true
+end)
+
+-- Khung chứa các TAB
+local tabContainer = Instance.new("Frame")
+tabContainer.Size = UDim2.new(1, 0, 0, 35)
+tabContainer.Position = UDim2.new(0, 0, 0, 40)
+tabContainer.BackgroundColor3 = Theme.TabBG
+tabContainer.ZIndex = 101
+tabContainer.Parent = mainFrame
+
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, -20, 1, -85)
+contentContainer.Position = UDim2.new(0, 10, 0, 80)
+contentContainer.BackgroundTransparency = 1
+contentContainer.ZIndex = 101
+contentContainer.Parent = mainFrame
+
+local tabButtons, tabPages = {}, {}
+
+local function createTab(name, index)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.2, 0, 1, 0)
+	btn.Position = UDim2.new(0.2 * (index - 1), 0, 0, 0)
+	btn.BackgroundTransparency = 1
+	btn.Text = name
+	pcall(function() btn.Font = Enum.Font.GothamBold end)
+	btn.TextSize = 11
+	btn.TextColor3 = Theme.TextDark
+	btn.ZIndex = 102
+	btn.Parent = tabContainer
+	
+	local page = Instance.new("ScrollingFrame")
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.ScrollBarThickness = 6 -- To hơn xíu để dễ vuốt cuộn trên mobile
+	page.CanvasSize = UDim2.new(0, 0, 1.8, 0)
+	page.Visible = false
+	page.ZIndex = 102
+	page.BorderSizePixel = 0
+	page.Parent = contentContainer
+	
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 8)
+	listLayout.Parent = page
+	
+	table.insert(tabButtons, btn)
+	table.insert(tabPages, page)
+	
+	btn.MouseButton1Click:Connect(function()
+		for _, b in ipairs(tabButtons) do b.TextColor3 = Theme.TextDark b.BackgroundTransparency = 1 end
+		for _, p in ipairs(tabPages) do p.Visible = false end
+		btn.TextColor3 = SelectedThemeColor
+		btn.BackgroundTransparency = 0.8
+		btn.BackgroundColor3 = SelectedThemeColor
+		page.Visible = true
+	end)
+	return page
+end
+
+local Tab1 = createTab("🏠 Main", 1)
+local Tab2 = createTab("⚙️ Settings", 2)
+local Tab3 = createTab("🤖 Auto", 3)
+local Tab4 = createTab("👁️ ESP", 4)
+local Tab5 = createTab("🗺️ Map", 5)
+
+tabButtons[1].TextColor3 = SelectedThemeColor
+registerThemeElement(tabButtons[1], "TextColor3")
+tabPages[1].Visible = true
+
+-- ==========================================
+-- HÀM DỰNG CÁC ĐỐI TƯỢNG ĐIỀU KHIỂN (SLIDER, TOGGLE...)
+-- ==========================================
+local function createToggle(parent, text, configKey, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 38) -- Tăng chiều cao nhẹ để ngón tay dễ chạm
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.ZIndex = 103
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local subStroke = Instance.new("UIStroke")
+	subStroke.Color = Color3.fromRGB(50, 50, 50)
+	subStroke.Thickness = 1
+	subStroke.Parent = frame
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.7, 0, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	pcall(function() label.Font = Enum.Font.Gotham end)
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 104
+	label.Parent = frame
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 50, 0, 26)
+	btn.Position = UDim2.new(1, -60, 0.5, -13)
+	btn.BackgroundColor3 = Config[configKey] and SelectedThemeColor or Color3.fromRGB(60, 60, 60)
+	btn.Text = Config[configKey] and "ON" or "OFF"
+	btn.TextColor3 = Theme.Text
+	pcall(function() btn.Font = Enum.Font.GothamBold end)
+	btn.ZIndex = 104
+	btn.Parent = frame
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+	if Config[configKey] then registerThemeElement(btn, "BackgroundColor3") end
+	
+	btn.MouseButton1Click:Connect(function()
+		Config[configKey] = not Config[configKey]
+		btn.Text = Config[configKey] and "ON" or "OFF"
+		
+		local targetColor = Config[configKey] and SelectedThemeColor or Color3.fromRGB(60, 60, 60)
+		TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor}):Play()
+		
+		if Config[configKey] then
+			registerThemeElement(btn, "BackgroundColor3")
+		else
+			ThemeElements[btn] = nil
+		end
+		
+		if callback then callback(Config[configKey]) end
+	end)
+	
+	if configKey == "IsPulling" then
+		_G.MainToggleUpdate = function(state)
+			btn.Text = state and "ON" or "OFF"
+			local targetColor = state and SelectedThemeColor or Color3.fromRGB(60, 60, 60)
+			TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor}):Play()
+			if state then registerThemeElement(btn, "BackgroundColor3") else ThemeElements[btn] = nil end
+		end
+	end
+end
+
+local function createSlider(parent, text, configKey, min, max, isFloat, customCallback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 52) -- Tăng nhẹ kích thước slider cho mobile
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.ZIndex = 103
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local subStroke = Instance.new("UIStroke")
+	subStroke.Color = Color3.fromRGB(50, 50, 50)
+	subStroke.Thickness = 1
+	subStroke.Parent = frame
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.7, 0, 0, 20)
+	label.Position = UDim2.new(0, 10, 0, 4)
+	label.BackgroundTransparency = 1
+	label.Text = text .. ": " .. tostring(Config[configKey])
+	label.TextColor3 = Theme.Text
+	pcall(function() label.Font = Enum.Font.Gotham end)
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 104
+	label.Parent = frame
+	
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, -20, 0, 10) -- Thanh trượt to hơn (10px) dễ vuốt cảm ứng
+	bar.Position = UDim2.new(0, 10, 0, 32)
+	bar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	bar.ZIndex = 104
+	bar.Parent = frame
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+	
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new((Config[configKey] - min) / (max - min), 0, 1, 0)
+	fill.BackgroundColor3 = SelectedThemeColor
+	fill.ZIndex = 104
+	fill.Parent = bar
+	Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+	registerThemeElement(fill, "BackgroundColor3")
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 1, 0)
+	btn.BackgroundTransparency = 1
+	btn.Text = ""
+	btn.ZIndex = 105
+	btn.Parent = bar
+	
+	local dragging = false
+	local function updateSlider(input)
+		local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+		fill.Size = UDim2.new(pos, 0, 1, 0)
+		local val = min + (pos * (max - min))
+		val = isFloat and string.format("%.1f", val) or math.floor(val)
+		Config[configKey] = tonumber(val)
+		label.Text = text .. ": " .. val
+		if customCallback then customCallback(Config[configKey]) end
+	end
+	
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true updateSlider(input)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then updateSlider(input) end
+	end)
+	
+	return function(newVal)
+		Config[configKey] = newVal
+		fill.Size = UDim2.new((newVal - min) / (max - min), 0, 1, 0)
+		label.Text = text .. ": " .. newVal
+	end
+end
+
+local updateMobDistanceSlider
+
+local function createMultiChoice(parent, text, configKey, options, customCallback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 60)
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.ZIndex = 103
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local subStroke = Instance.new("UIStroke")
+	subStroke.Color = Color3.fromRGB(50, 50, 50)
+	subStroke.Thickness = 1
+	subStroke.Parent = frame
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -20, 0, 20)
+	label.Position = UDim2.new(0, 10, 0, 5)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	pcall(function() label.Font = Enum.Font.Gotham end)
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 104
+	label.Parent = frame
+	
+	local btnWidth = 1 / #options
+	local btns = {}
+	for i, opt in ipairs(options) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(btnWidth, -5, 0, 25)
+		btn.Position = UDim2.new(btnWidth * (i - 1), 5, 0, 30)
+		btn.BackgroundColor3 = Config[configKey] == opt and SelectedThemeColor or Color3.fromRGB(60, 60, 60)
+		btn.Text = opt
+		btn.TextColor3 = Theme.Text
+		pcall(function() btn.Font = Enum.Font.GothamBold end)
+		btn.TextSize = 11
+		btn.ZIndex = 104
+		btn.Parent = frame
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+		table.insert(btns, btn)
+		if Config[configKey] == opt then registerThemeElement(btn, "BackgroundColor3") end
+		
+		btn.MouseButton1Click:Connect(function()
+			Config[configKey] = opt
+			for _, b in ipairs(btns) do 
+				b.BackgroundColor3 = Color3.fromRGB(60, 60, 60) 
+				ThemeElements[b] = nil
+			end
+			btn.BackgroundColor3 = SelectedThemeColor
+			registerThemeElement(btn, "BackgroundColor3")
+			if customCallback then customCallback(opt) end
+		end)
+	end
+end
+
+-- ==========================================
+-- SHOW ALERT NOTIFICATION & SHADOW OVERLAY (CẢNH BÁO POPUP)
+-- ==========================================
+local function showOverlayAlert(messageText, confirmCallback)
+	isOverlayActive = true -- Chặn Auto Click ngay khi bắt đầu hiển thị thông báo
+	overlayFrame.ZIndex = 110
+	overlayFrame.Visible = true
+	
+	local info = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(overlayFrame, info, {BackgroundTransparency = 0.4})
+	tween:Play()
+	
+	local alertBox = Instance.new("Frame")
+	alertBox.Size = UDim2.new(0, 300, 0, 160)
+	alertBox.Position = UDim2.new(0.5, -150, 0.4, -80)
+	alertBox.BackgroundColor3 = Theme.MainBG
+	alertBox.BorderSizePixel = 0
+	alertBox.ZIndex = 111
+	alertBox.Parent = overlayFrame
+	
+	local boxCorner = Instance.new("UICorner")
+	boxCorner.CornerRadius = UDim.new(0, 8)
+	boxCorner.Parent = alertBox
+	
+	local boxStroke = Instance.new("UIStroke")
+	boxStroke.Color = SelectedThemeColor
+	boxStroke.Thickness = 2
+	boxStroke.Parent = alertBox
+	registerThemeElement(boxStroke, "Color")
+	
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, -20, 0, 70)
+	textLabel.Position = UDim2.new(0, 10, 0, 15)
+	textLabel.BackgroundTransparency = 1
+	textLabel.Text = messageText
+	textLabel.TextColor3 = Theme.Text
+	pcall(function() textLabel.Font = Enum.Font.GothamBold end)
+	textLabel.TextSize = 13
+	textLabel.TextWrapped = true
+	textLabel.ZIndex = 112
+	textLabel.Parent = alertBox
+	
+	local function createAlertButton(btnText, xOffset, isConfirm)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0.4, 0, 0, 35)
+		btn.Position = UDim2.new(0.1 + xOffset, 0, 0.65, 0)
+		btn.BackgroundColor3 = isConfirm and SelectedThemeColor or Color3.fromRGB(60, 60, 60)
+		btn.Text = btnText
+		btn.TextColor3 = Theme.Text
+		pcall(function() btn.Font = Enum.Font.GothamBold end)
+		btn.TextSize = 12
+		btn.ZIndex = 112
+		btn.Parent = alertBox
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+		if isConfirm then registerThemeElement(btn, "BackgroundColor3") end
+		
+		btn.MouseButton1Click:Connect(function()
+			isOverlayActive = false -- Mở lại Auto Click khi người dùng lựa chọn xong
+			local fadeTween = TweenService:Create(overlayFrame, info, {BackgroundTransparency = 1})
+			fadeTween:Play()
+			fadeTween.Completed:Connect(function()
+				overlayFrame.Visible = false
+				overlayFrame.ZIndex = 80
+				alertBox:Destroy()
+			end)
+			if isConfirm and confirmCallback then
+				confirmCallback()
+			end
+		end)
+	end
+	
+	if messageText == "BẠN MUỐN DÙNG VŨ KHÍ NÀO?" then
+		createAlertButton("MELEE (CẬN CHIẾN)", 0, true)
+		createAlertButton("GUN (SÚNG BẮN AX)", 0.4, false)
+		
+		alertBox:GetChildren()[3].MouseButton1Click:Connect(function()
+			Config.WeaponType = "Melee"
+			Config.MobDistance = 3
+			hasChosenWeapon = true 
+			if updateMobDistanceSlider then updateMobDistanceSlider(3) end
+		end)
+		alertBox:GetChildren()[4].MouseButton1Click:Connect(function()
+			Config.WeaponType = "Gun"
+			Config.MobDistance = 7
+			hasChosenWeapon = true 
+			if updateMobDistanceSlider then updateMobDistanceSlider(7) end
+		end)
+	else
+		createAlertButton("ĐỒNG Ý", 0, true)
+		createAlertButton("HỦY", 0.4, false)
+	end
+end
+
+-- ==========================================
+-- XÂY DỰNG CHI TIẾT CÁC TAB CHỨC NĂNG
+-- ==========================================
+
+-- --- TAB 1: TRANG CHỦ (MAIN) ---
+local function handleToggleSystem(state)
+	if state then
+		LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+		noticeLabel.Visible = true
+		
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+			Config.CurrentSpawnY = LocalPlayer.Character.HumanoidRootPart.Position.Y + Config.HeightOffset
+		end
+		
+		equipWeaponLogic()
+		
+		if not hasChosenWeapon then
+			showOverlayAlert("BẠN MUỐN DÙNG VŨ KHÍ NÀO?", function() end)
+		end
+	else
+		LocalPlayer.CameraMode = Enum.CameraMode.Classic
+		noticeLabel.Visible = false
+		
+		equipWeaponLogic()
+	end
+end
+
+createToggle(Tab1, "🔥 Kích Hoạt Hệ Thống Kéo Quái [Chạm F]", "IsPulling", handleToggleSystem)
+
+createMultiChoice(Tab1, "Chọn Loại Vũ Khí Đang Dùng:", "WeaponType", {"Melee", "Gun"}, function(choice)
+	hasChosenWeapon = true 
+	if choice == "Melee" then
+		Config.MobDistance = 3
+		if updateMobDistanceSlider then updateMobDistanceSlider(3) end
+	elseif choice == "Gun" then
+		Config.MobDistance = 7
+		if updateMobDistanceSlider then updateMobDistanceSlider(7) end
+	end
+end)
+
+createMultiChoice(Tab1, "Mục Tiêu Nhắm/Hút:", "TargetPart", {"HumanoidRootPart", "Head"})
+createMultiChoice(Tab1, "Vị Trí Gom Quái:", "PositionMode", {"Trên đầu", "Trước mặt"})
+createToggle(Tab1, "📦 Tự Động Nhặt Hộp Vũ Khí (Phantom)", "AutoLootCrates")
+
+-- --- TAB 2: THIẾT LẬP (SETTINGS) ---
+
+-- BỘ CHỈNH MÀU SẮC CHỦ ĐỀ TRỰC QUAN (MOBILE THEMES)
+local colors = {"Crimson Red", "Neon Blue", "Emerald Green", "Void Purple", "Golden Amber"}
+createMultiChoice(Tab2, "Chỉnh Màu Sắc Chủ Đề Menu:", "WeaponType_placeholder", colors, function(choice)
+	if ThemesList[choice] then
+		updateThemeColor(ThemesList[choice])
+	end
+end)
+
+createSlider(Tab2, "Bán Kính Quét Quái Max 250", "Radius", 10, 250, false)
+createSlider(Tab2, "Khoảng Cách Bay Y Tăng Thêm", "HeightOffset", 5, 100, false)
+updateMobDistanceSlider = createSlider(Tab2, "Khoảng Cách Quái Trước Mặt Max 10", "MobDistance", 1, 10, true)
+
+createSlider(Tab2, "Tốc Độ Người Chơi (WalkSpeed)", "WalkSpeed", 16, 250, false)
+createSlider(Tab2, "Lực Nhảy Người Chơi (JumpPower)", "JumpPower", 50, 250, false)
+
+-- --- TAB 3: TỰ ĐỘNG HÓA (AUTO) ---
+createToggle(Tab3, "Xuyên Tường (Noclip)", "NoclipEnabled", function(state)
+	if not state and noclipConnection then
+		noclipConnection:Disconnect()
+		noclipConnection = nil
+	end
+end)
+createToggle(Tab3, "Chống Treo Máy (Anti-AFK)", "AntiAFKEnabled")
+createToggle(Tab3, "Tự Động Bật Lại Khi Sống Lại", "AutoRespawn")
+createToggle(Tab3, "Tự Bay Lại Vị Trí Trước Khi Chết", "AutoReturn")
+createToggle(Tab3, "Aimbot Camera Ghì Quái", "AimHead")
+createToggle(Tab3, "Auto Fire (Tự Động Tấn Công)", "AutoFire")
+
+-- --- TAB 4: ESP ---
+createToggle(Tab4, "ESP Line vẽ trên HumanoidRootPart", "EspLine", function() clearESP() end)
+createToggle(Tab4, "ESP Box vẽ trên HumanoidRootPart", "EspBox", function() clearESP() end)
+createToggle(Tab4, "ESP Highlight Toàn Thân", "EspHighlight", function() clearESP() end)
+
+-- --- TAB 5: BẢN ĐỒ & DỊCH CHUYỂN (MAP TELEPORT) ---
+local currentLocLabel = Instance.new("TextLabel")
+currentLocLabel.Size = UDim2.new(1, -20, 0, 30)
+currentLocLabel.Position = UDim2.new(0, 10, 0, 5)
+currentLocLabel.BackgroundTransparency = 1
+currentLocLabel.Text = "📍 Đang Farm Tại: " .. Config.CurrentFarmLocationName
+currentLocLabel.TextColor3 = SelectedThemeColor
+pcall(function() currentLocLabel.Font = Enum.Font.GothamBold end)
+currentLocLabel.TextSize = 13
+currentLocLabel.TextXAlignment = Enum.TextXAlignment.Left
+currentLocLabel.ZIndex = 103
+currentLocLabel.Parent = Tab5
+registerThemeElement(currentLocLabel, "TextColor3")
+
+local mapButtonListFrame = Instance.new("Frame")
+mapButtonListFrame.Size = UDim2.new(1, 0, 1, -40)
+mapButtonListFrame.Position = UDim2.new(0, 0, 0, 40)
+mapButtonListFrame.BackgroundTransparency = 1
+mapButtonListFrame.ZIndex = 103
+mapButtonListFrame.Parent = Tab5
+
+local mapListLayout = Instance.new("UIListLayout")
+mapListLayout.Padding = UDim.new(0, 6)
+mapListLayout.Parent = mapButtonListFrame
+
+for _, loc in ipairs(Locations) do
+	local mapBtn = Instance.new("TextButton")
+	mapBtn.Size = UDim2.new(1, 0, 0, 38)
+	mapBtn.BackgroundColor3 = Theme.TabBG
+	mapBtn.Text = "🚀 TELEPORT: " .. loc.Name
+	mapBtn.TextColor3 = Theme.Text
+	pcall(function() mapBtn.Font = Enum.Font.GothamBold end)
+	mapBtn.TextSize = 11
+	mapBtn.ZIndex = 104
+	mapBtn.Parent = mapButtonListFrame
+	
+	local mapCorner = Instance.new("UICorner")
+	mapCorner.CornerRadius = UDim.new(0, 4)
+	mapCorner.Parent = mapBtn
+	
+	local subStroke = Instance.new("UIStroke")
+	subStroke.Color = Color3.fromRGB(50, 50, 50)
+	subStroke.Thickness = 1
+	subStroke.Parent = mapBtn
+	
+	mapBtn.MouseButton1Click:Connect(function()
+		showOverlayAlert("BẠN CÓ MUỐN DỊCH CHUYỂN ĐẾN " .. loc.Name .. " KHÔNG?", function()
+			local char = LocalPlayer.Character
+			if char and char:FindFirstChild("HumanoidRootPart") then
+				Config.CurrentSpawnY = loc.Position.Y 
+				Config.CurrentFarmLocationName = loc.Name
+				currentLocLabel.Text = "📍 Đang Farm Tại: " .. loc.Name
+				char.HumanoidRootPart.CFrame = CFrame.new(loc.Position)
+			end
+		end)
+	end)
+end
+
+-- ==========================================
+-- SỰ KIỆN CHẠM NÚT NỔI [F] PHỤ TRÊN MOBILE
+-- ==========================================
+floatFButton.MouseButton1Click:Connect(function()
+	Config.IsPulling = not Config.IsPulling
+	if _G.MainToggleUpdate then _G.MainToggleUpdate(Config.IsPulling) end
+	handleToggleSystem(Config.IsPulling)
+end)
+
+-- ==========================================
+-- LOGIC QUẢN LÝ ESP & DỌN DẸP
+-- ==========================================
+function clearESP()
+	for _, inst in pairs(espInstances) do if inst then inst:Destroy() end end
+	table.clear(espInstances)
+end
+
+local function drawESP(targetPart)
+	if not targetPart or not targetPart.Parent then return end
+	local character = targetPart.Parent
+	
+	if Config.EspHighlight and not character:FindFirstChild("ESPHighlight") then
+		local hl = Instance.new("Highlight")
+		hl.Name = "ESPHighlight"
+		hl.FillColor = SelectedThemeColor
+		hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+		hl.Parent = character
+		table.insert(espInstances, hl)
+	end
+	
+	if Config.EspBox and not targetPart:FindFirstChild("ESPBox") then
+		local box = Instance.new("BoxHandleAdornment")
+		box.Name = "ESPBox"
+		box.Size = targetPart.Size + Vector3.new(0.5, 0.5, 0.5)
+		box.Adornee = targetPart
+		box.AlwaysOnTop = true
+		box.ZIndex = 5
+		box.Transparency = 0.5
+		box.Color3 = SelectedThemeColor
+		box.Parent = targetPart
+		table.insert(espInstances, box)
+	end
+	
+	if Config.EspLine and not targetPart:FindFirstChild("ESPLineAttach") then
+		local myChar = LocalPlayer.Character
+		if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+			local attach1 = Instance.new("Attachment", myChar.HumanoidRootPart)
+			local attach2 = Instance.new("Attachment", targetPart)
+			attach2.Name = "ESPLineAttach"
+			
+			local beam = Instance.new("Beam")
+			beam.Name = "ESPLine"
+			beam.Attachment0 = attach1
+			beam.Attachment1 = attach2
+			beam.FaceCamera = true
+			beam.Color = ColorSequence.new(SelectedThemeColor)
+			beam.Width0 = 0.05
+			beam.Width1 = 0.05
+			beam.Parent = targetPart
+			
+			table.insert(espInstances, attach1)
+			table.insert(espInstances, attach2)
+			table.insert(espInstances, beam)
+		end
+	end
+end
+
+-- ==========================================
+-- CHỐNG TREO MÁY CHO ĐIỆN THOẠI (ANTI-AFK MOBILE)
+-- ==========================================
+LocalPlayer.Idled:Connect(function()
+	if Config.AntiAFKEnabled then
+		-- Mobile tối ưu: Xoay nhẹ góc camera để hệ thống nhận diện vẫn hoạt động, tránh kick 20 phút
+		local camera = workspace.CurrentCamera
+		if camera then
+			camera.CFrame = camera.CFrame * CFrame.Angles(0, math.rad(0.1), 0)
+		end
+	end
+end)
+
+-- ==========================================
+-- XUYÊN TƯỜNG (NOCLIP CORE)
+-- ==========================================
+RunService.Stepped:Connect(function()
+	if Config.NoclipEnabled then
+		local char = LocalPlayer.Character
+		if char then
+			for _, child in ipairs(char:GetDescendants()) do
+				if child:IsA("BasePart") and child.CanCollide then
+					child.CanCollide = false
+				end
+			end
+		end
+	end
+end)
+
+-- ==========================================
+-- THEO DÕI NGƯỜI CHƠI CHẾT & HỒI SINH
+-- ==========================================
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.wait(1)
+	if Config.IsPulling or Config.AutoRespawn then
+		equipWeaponLogic()
+	end
+
+	if Config.AutoRespawn then
+		Config.IsPulling = true
+		if _G.MainToggleUpdate then _G.MainToggleUpdate(true) end
+		noticeLabel.Visible = true
+		
+		if char:FindFirstChild("HumanoidRootPart") then
+			Config.CurrentSpawnY = char.HumanoidRootPart.Position.Y + Config.HeightOffset
+		end
+	end
+	
+	char:WaitForChild("Humanoid").Died:Connect(function()
+		if char:FindFirstChild("HumanoidRootPart") then
+			Config.LastDeathPosition = char.HumanoidRootPart.Position
+		end
+		Config.IsPulling = false
+		if _G.MainToggleUpdate then _G.MainToggleUpdate(false) end
+		noticeLabel.Visible = false
+	end)
+	
+	if Config.AutoReturn and Config.LastDeathPosition then
+		task.wait(0.5)
+		if char:FindFirstChild("HumanoidRootPart") then
+			char.HumanoidRootPart.CFrame = CFrame.new(Config.LastDeathPosition)
+			Config.CurrentSpawnY = Config.LastDeathPosition.Y 
+		end
+	end
+end)
+
+-- ==========================================
+-- CÔNG THỨC RENDERSTEPPED KHÓA CỨNG (WALKSPEED & JUMPPOWER)
+-- ==========================================
+RunService.RenderStepped:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChild("Humanoid")
+	if not hum then return end
+
+	if Config.LoopSpeed then
+		if hum.WalkSpeed ~= Config.WalkSpeed then
+			hum.WalkSpeed = Config.WalkSpeed
+		end
+	end
+
+	if Config.LoopJump then
+		hum.UseJumpPower = true 
+		if hum.JumpPower ~= Config.JumpPower then
+			hum.JumpPower = Config.JumpPower
+		end
+	end
+end)
+
+-- ==========================================
+-- VÒNG LẶP TỐI ƯU HÓA: QUÉT QUÁI & LOOT CRATES (MOBILE PERFORMANCE STABLE)
+-- ==========================================
+task.spawn(function()
+	while true do
+		task.wait(0.35) -- Giãn cách nhẹ để điện thoại không bị quá nhiệt
+		local char = LocalPlayer.Character
+		local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+		
+		if myRoot then
+			if Config.IsPulling or Config.EspLine or Config.EspBox or Config.EspHighlight then
+				local temp = {}
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("BasePart") and obj.Name == Config.TargetPart and obj ~= myRoot and not obj:IsDescendantOf(char) then
+						local isPlayer = false
+						for _, p in ipairs(Players:GetPlayers()) do 
+							if p.Character and obj:IsDescendantOf(p.Character) then isPlayer = true break end 
+						end
+						
+						if not isPlayer then
+							local dist = (obj.Position - myRoot.Position).Magnitude
+							if dist <= Config.Radius then 
+								table.insert(temp, obj) 
+							end
+						end
+					end
+				end
+				cachedNPCs = temp
+			end
+			
+			if Config.AutoLootCrates then
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("BasePart") and obj.Name == "Phantom" then
+						myRoot.CFrame = obj.CFrame
+						task.wait(0.1)
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- ==========================================
+-- VÒNG LẶP CHÍNH (HEARTBEAT): HÚT VÀ AIM BOT
+-- ==========================================
+local lastClickTime = 0
+
+RunService.Heartbeat:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	
+	local myRoot = char:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	
+	if Config.IsPulling then
+		myRoot.Velocity = Vector3.new(myRoot.Velocity.X, 0, myRoot.Velocity.Z)
+		myRoot.CFrame = CFrame.new(myRoot.Position.X, Config.CurrentSpawnY, myRoot.Position.Z)
+		
+		-- Auto click: Chỉ thực thi clicker khi biến isOverlayActive đạt giá trị false
+		if Config.AutoFire and not isOverlayActive then
+			local t = os.clock()
+			if t - lastClickTime >= 0.1 then
+				lastClickTime = t
+				-- Giả lập touch cảm ứng lên màn hình thay cho nhấp chuột PC
+				VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+				task.wait(0.01)
+				VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+			end
+		end
+		
+		local targetPos
+		if Config.PositionMode == "Trên đầu" then
+			targetPos = myRoot.Position + Vector3.new(0, Config.MobDistance, 0)
+		else
+			targetPos = myRoot.Position + (myRoot.CFrame.LookVector * Config.MobDistance)
+		end
+		
+		local closestPart, minDist = nil, math.huge
+		
+		for _, part in ipairs(cachedNPCs) do
+			if part and part.Parent then
+				part.CFrame = CFrame.new(targetPos)
+				local dist = (part.Position - myRoot.Position).Magnitude
+				if dist < minDist then minDist = dist closestPart = part end
+				
+				drawESP(part)
+			end
+		end
+		
+		if Config.AimHead and closestPart then
+			local cam = workspace.CurrentCamera
+			if cam then cam.CFrame = CFrame.new(cam.CFrame.Position, closestPart.Position) end
+		end
+	end
+end)
