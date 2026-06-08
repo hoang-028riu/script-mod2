@@ -1,0 +1,627 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- CẤU HÌNH BIẾN TOÀN CỤC (GLOBAL CONFIGS)
+-- ==========================================
+local Config = {
+	-- Tab 1: Main
+	IsPulling = false,
+	TargetPart = "HumanoidRootPart",
+	PositionMode = "Trước mặt",
+	
+	-- Tab 2: Settings
+	Radius = 150,       -- Max 250
+	WalkSpeed = 16,     -- Max 250
+	JumpPower = 50,     -- Max 250
+	FixedY = 20,        -- Max 250
+	MobDistance = 7,    -- Max 10
+	ToggleKey = Enum.KeyCode.F, -- Phím bật/tắt mặc định
+	
+	-- Tab 3: Auto
+	AutoRespawn = false,
+	AutoReturn = false,
+	AimHead = true,
+	AutoFire = true,
+	LoopSpeed = false,  -- Sử dụng công thức RenderStepped mới
+	LoopJump = false,
+	
+	-- Tab 4: ESP
+	EspLine = false,
+	EspBox = false,
+	EspHighlight = false,
+	
+	LastDeathPosition = nil
+}
+
+local cachedNPCs = {}
+local espInstances = {}
+
+-- ==========================================
+-- TẠO GIAO DIỆN (UI FRAMEWORK)
+-- ==========================================
+local Theme = {
+	MainBG = Color3.fromRGB(15, 15, 15),
+	TabBG = Color3.fromRGB(25, 25, 25),
+	Accent = Color3.fromRGB(220, 20, 30),
+	Text = Color3.fromRGB(255, 255, 255),
+	TextDark = Color3.fromRGB(150, 150, 150)
+}
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UltimateRedHub"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game:GetService("CoreGui")
+if not screenGui.Parent then screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- Logo tròn (Mini Icon)
+local logoBtn = Instance.new("TextButton")
+logoBtn.Size = UDim2.new(0, 50, 0, 50)
+logoBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
+logoBtn.BackgroundColor3 = Theme.MainBG
+logoBtn.Text = "HUB"
+logoBtn.TextColor3 = Theme.Accent
+logoBtn.Font = Enum.Font.GothamBold
+logoBtn.TextSize = 16
+logoBtn.Parent = screenGui
+
+local logoCorner = Instance.new("UICorner")
+logoCorner.CornerRadius = UDim.new(1, 0)
+logoCorner.Parent = logoBtn
+
+local logoStroke = Instance.new("UIStroke")
+logoStroke.Color = Theme.Accent
+logoStroke.Thickness = 2
+logoStroke.Parent = logoBtn
+
+-- Main UI Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 450, 0, 360)
+mainFrame.Position = UDim2.new(0.5, -225, 0.5, -180)
+mainFrame.BackgroundColor3 = Theme.MainBG
+mainFrame.Visible = false
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 30)
+title.Position = UDim2.new(0, 10, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "🔥 SUPREME RED HUB 🔥"
+title.TextColor3 = Theme.Accent
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = mainFrame
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Theme.Text
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.Parent = mainFrame
+
+local function makeDraggable(guiObject)
+	local dragging, dragInput, dragStart, startPos
+	guiObject.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true dragStart = input.Position startPos = guiObject.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	guiObject.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+makeDraggable(logoBtn)
+makeDraggable(mainFrame)
+
+logoBtn.MouseButton1Click:Connect(function() mainFrame.Visible = not mainFrame.Visible logoBtn.Visible = false end)
+closeBtn.MouseButton1Click:Connect(function() mainFrame.Visible = false logoBtn.Visible = true end)
+
+local tabContainer = Instance.new("Frame")
+tabContainer.Size = UDim2.new(1, 0, 0, 30)
+tabContainer.Position = UDim2.new(0, 0, 0, 40)
+tabContainer.BackgroundColor3 = Theme.TabBG
+tabContainer.Parent = mainFrame
+
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, -20, 1, -85)
+contentContainer.Position = UDim2.new(0, 10, 0, 75)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = mainFrame
+
+local tabButtons, tabPages = {}, {}
+
+local function createTab(name, index)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.25, 0, 1, 0)
+	btn.Position = UDim2.new(0.25 * (index - 1), 0, 0, 0)
+	btn.BackgroundTransparency = 1
+	btn.Text = name
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 14
+	btn.TextColor3 = Theme.TextDark
+	btn.Parent = tabContainer
+	
+	local page = Instance.new("ScrollingFrame")
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.ScrollBarThickness = 4
+	page.CanvasSize = UDim2.new(0, 0, 1.5, 0)
+	page.Visible = false
+	page.Parent = contentContainer
+	
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 8)
+	listLayout.Parent = page
+	
+	table.insert(tabButtons, btn)
+	table.insert(tabPages, page)
+	
+	btn.MouseButton1Click:Connect(function()
+		for _, b in ipairs(tabButtons) do b.TextColor3 = Theme.TextDark b.BackgroundTransparency = 1 end
+		for _, p in ipairs(tabPages) do p.Visible = false end
+		btn.TextColor3 = Theme.Accent
+		btn.BackgroundTransparency = 0.8
+		btn.BackgroundColor3 = Theme.Accent
+		page.Visible = true
+	end)
+	return page
+end
+
+local Tab1 = createTab("🏠 Main", 1)
+local Tab2 = createTab("⚙️ Settings", 2)
+local Tab3 = createTab("🤖 Auto", 3)
+local Tab4 = createTab("👁️ ESP", 4)
+
+tabButtons[1].TextColor3 = Theme.Accent
+tabPages[1].Visible = true
+
+-- ==========================================
+-- UI COMPONENTS HELPER
+-- ==========================================
+local function createToggle(parent, text, configKey, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 35)
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.7, 0, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = frame
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 50, 0, 25)
+	btn.Position = UDim2.new(1, -60, 0.5, -12.5)
+	btn.BackgroundColor3 = Config[configKey] and Theme.Accent or Color3.fromRGB(60, 60, 60)
+	btn.Text = Config[configKey] and "ON" or "OFF"
+	btn.TextColor3 = Theme.Text
+	btn.Font = Enum.Font.GothamBold
+	btn.Parent = frame
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+	
+	btn.MouseButton1Click:Connect(function()
+		Config[configKey] = not Config[configKey]
+		btn.Text = Config[configKey] and "ON" or "OFF"
+		btn.BackgroundColor3 = Config[configKey] and Theme.Accent or Color3.fromRGB(60, 60, 60)
+		if callback then callback(Config[configKey]) end
+	end)
+	
+	-- Lưu reference để gọi cập nhật từ phím tắt
+	if configKey == "IsPulling" then _G.MainToggleUpdate = function(state) 
+		btn.Text = state and "ON" or "OFF"
+		btn.BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(60, 60, 60)
+	end end
+end
+
+local function createSlider(parent, text, configKey, min, max, isFloat)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 50)
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.7, 0, 0, 20)
+	label.Position = UDim2.new(0, 10, 0, 5)
+	label.BackgroundTransparency = 1
+	label.Text = text .. ": " .. tostring(Config[configKey])
+	label.TextColor3 = Theme.Text
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = frame
+	
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, -20, 0, 8)
+	bar.Position = UDim2.new(0, 10, 0, 30)
+	bar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	bar.Parent = frame
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+	
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new((Config[configKey]-min)/(max-min), 0, 1, 0)
+	fill.BackgroundColor3 = Theme.Accent
+	fill.Parent = bar
+	Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 1, 0)
+	btn.BackgroundTransparency = 1
+	btn.Text = ""
+	btn.Parent = bar
+	
+	local dragging = false
+	local function updateSlider(input)
+		local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+		fill.Size = UDim2.new(pos, 0, 1, 0)
+		local val = min + (pos * (max - min))
+		val = isFloat and string.format("%.1f", val) or math.floor(val)
+		Config[configKey] = tonumber(val)
+		label.Text = text .. ": " .. val
+	end
+	
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true updateSlider(input)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then updateSlider(input) end
+	end)
+end
+
+local function createMultiChoice(parent, text, configKey, options)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 60)
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -20, 0, 20)
+	label.Position = UDim2.new(0, 10, 0, 5)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = frame
+	
+	local btnWidth = 1 / #options
+	local btns = {}
+	for i, opt in ipairs(options) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(btnWidth, -5, 0, 25)
+		btn.Position = UDim2.new(btnWidth * (i - 1), 5, 0, 30)
+		btn.BackgroundColor3 = Config[configKey] == opt and Theme.Accent or Color3.fromRGB(60, 60, 60)
+		btn.Text = opt
+		btn.TextColor3 = Theme.Text
+		btn.Font = Enum.Font.GothamBold
+		btn.Parent = frame
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+		table.insert(btns, btn)
+		
+		btn.MouseButton1Click:Connect(function()
+			Config[configKey] = opt
+			for _, b in ipairs(btns) do b.BackgroundColor3 = Color3.fromRGB(60, 60, 60) end
+			btn.BackgroundColor3 = Theme.Accent
+		end)
+	end
+end
+
+local function createKeybindBox(parent, text, configKey)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 35)
+	frame.BackgroundColor3 = Theme.TabBG
+	frame.Parent = parent
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.7, 0, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = frame
+	
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0, 50, 0, 25)
+	box.Position = UDim2.new(1, -60, 0.5, -12.5)
+	box.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	box.Text = Config[configKey].Name
+	box.TextColor3 = Theme.Text
+	box.Font = Enum.Font.GothamBold
+	box.Parent = frame
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+	
+	box.FocusLost:Connect(function()
+		local inputStr = box.Text:upper()
+		local success, key = pcall(function() return Enum.KeyCode[inputStr] end)
+		if success and key then
+			Config[configKey] = key
+			box.Text = key.Name
+		else
+			box.Text = Config[configKey].Name
+		end
+	end)
+end
+
+-- ==========================================
+-- BUILD TAB CONTENTS
+-- ==========================================
+
+-- TAB 1: MAIN
+createToggle(Tab1, "🔥 Kích Hoạt (Kéo & Aimbot)", "IsPulling", function(state)
+	if state then
+		LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+		
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+			Config.FixedY = math.floor(LocalPlayer.Character.HumanoidRootPart.Position.Y + 20)
+		end
+	else
+		LocalPlayer.CameraMode = Enum.CameraMode.Classic
+	end
+end)
+createMultiChoice(Tab1, "Mục Tiêu Kéo:", "TargetPart", {"HumanoidRootPart", "Head"})
+createMultiChoice(Tab1, "Vị trí gom Mob:", "PositionMode", {"Trên đầu", "Trước mặt"})
+
+-- TAB 2: SETTINGS (SLIDERS & KEYBINDS)
+createKeybindBox(Tab2, "Phím Tắt Bật/Tắt Chức Năng", "ToggleKey")
+createSlider(Tab2, "Bán kính quét", "Radius", 10, 250, false)
+createSlider(Tab2, "Độ cao cố định (Y)", "FixedY", 0, 250, false)
+createSlider(Tab2, "Khoảng cách Mob (Y/Z)", "MobDistance", 1, 10, true)
+createSlider(Tab2, "Loop WalkSpeed", "WalkSpeed", 16, 250, false)
+createSlider(Tab2, "Loop JumpPower", "JumpPower", 50, 250, false)
+
+-- TAB 3: AUTO
+createToggle(Tab3, "Khóa WalkSpeed (RenderStepped)", "LoopSpeed")
+createToggle(Tab3, "Khóa JumpPower (RenderStepped)", "LoopJump")
+createToggle(Tab3, "Tự động kích hoạt khi hồi sinh", "AutoRespawn")
+createToggle(Tab3, "Tự động bay lại chỗ vừa chết", "AutoReturn")
+createToggle(Tab3, "Aimbot Camera", "AimHead")
+createToggle(Tab3, "Auto Click (Tự Đánh)", "AutoFire")
+
+-- TAB 4: ESP
+createToggle(Tab4, "ESP Line (HumanoidRootPart)", "EspLine", function() clearESP() end)
+createToggle(Tab4, "ESP Box (HumanoidRootPart)", "EspBox", function() clearESP() end)
+createToggle(Tab4, "ESP Highlight (Chói)", "EspHighlight", function() clearESP() end)
+
+-- ==========================================
+-- LOGIC HỆ THỐNG: ESP & CACHING & HOTKEY
+-- ==========================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Config.ToggleKey then
+		Config.IsPulling = not Config.IsPulling
+		if _G.MainToggleUpdate then _G.MainToggleUpdate(Config.IsPulling) end
+		
+		if Config.IsPulling then
+			LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+			task.wait(0.05)
+			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+		else
+			LocalPlayer.CameraMode = Enum.CameraMode.Classic
+		end
+	end
+end)
+
+function clearESP()
+	for _, inst in pairs(espInstances) do if inst then inst:Destroy() end end
+	table.clear(espInstances)
+end
+
+local function drawESP(targetPart)
+	if not targetPart or not targetPart.Parent then return end
+	local character = targetPart.Parent
+	
+	-- ESP Highlight trên toàn thân (Highlight bắt buộc phải dán vào Model)
+	if Config.EspHighlight and not character:FindFirstChild("ESPHighlight") then
+		local hl = Instance.new("Highlight")
+		hl.Name = "ESPHighlight"
+		hl.FillColor = Theme.Accent
+		hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+		hl.Parent = character
+		table.insert(espInstances, hl)
+	end
+	
+	-- ESP Box chỉ vẽ đúng trên HumanoidRootPart
+	if Config.EspBox and not targetPart:FindFirstChild("ESPBox") then
+		local box = Instance.new("BoxHandleAdornment")
+		box.Name = "ESPBox"
+		box.Size = targetPart.Size -- Box sát vào bộ phận
+		box.Adornee = targetPart
+		box.AlwaysOnTop = true
+		box.ZIndex = 5
+		box.Transparency = 0.5
+		box.Color3 = Theme.Accent
+		box.Parent = targetPart
+		table.insert(espInstances, box)
+	end
+	
+	-- ESP Line vẽ nối từ người chơi đến HumanoidRootPart của Mob
+	if Config.EspLine and not targetPart:FindFirstChild("ESPLineAttach") then
+		local myChar = LocalPlayer.Character
+		if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+			local attach1 = Instance.new("Attachment", myChar.HumanoidRootPart)
+			local attach2 = Instance.new("Attachment", targetPart)
+			attach2.Name = "ESPLineAttach"
+			
+			local beam = Instance.new("Beam")
+			beam.Name = "ESPLine"
+			beam.Attachment0 = attach1
+			beam.Attachment1 = attach2
+			beam.FaceCamera = true
+			beam.Color = ColorSequence.new(Theme.Accent)
+			beam.Width0 = 0.05
+			beam.Width1 = 0.05
+			beam.Parent = targetPart
+			
+			table.insert(espInstances, attach1)
+			table.insert(espInstances, attach2)
+			table.insert(espInstances, beam)
+		end
+	end
+end
+
+-- ==========================================
+-- CÔNG THỨC RENDERSTEPPED (SPEED & JUMP)
+-- ==========================================
+RunService.RenderStepped:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChild("Humanoid")
+	if not hum then return end
+
+	-- Xử lý Loop Speed (Áp dụng theo công thức cung cấp)
+	if Config.LoopSpeed then
+		if hum.WalkSpeed ~= Config.WalkSpeed then
+			hum.WalkSpeed = Config.WalkSpeed
+		end
+	end
+
+	-- Xử lý Loop Jump (Áp dụng theo công thức cung cấp)
+	if Config.LoopJump then
+		hum.UseJumpPower = true 
+		if hum.JumpPower ~= Config.JumpPower then
+			hum.JumpPower = Config.JumpPower
+		end
+	end
+end)
+
+-- Track Death & Respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+	if Config.AutoRespawn then
+		task.wait(1) 
+		Config.IsPulling = true
+		if _G.MainToggleUpdate then _G.MainToggleUpdate(true) end
+	end
+	
+	char:WaitForChild("Humanoid").Died:Connect(function()
+		if char:FindFirstChild("HumanoidRootPart") then
+			Config.LastDeathPosition = char.HumanoidRootPart.Position
+		end
+		Config.IsPulling = false
+		if _G.MainToggleUpdate then _G.MainToggleUpdate(false) end
+	end)
+	
+	if Config.AutoReturn and Config.LastDeathPosition then
+		task.wait(0.5)
+		if char:FindFirstChild("HumanoidRootPart") then
+			char.HumanoidRootPart.CFrame = CFrame.new(Config.LastDeathPosition)
+		end
+	end
+end)
+
+-- Vòng lặp tối ưu tìm mục tiêu ngầm
+task.spawn(function()
+	while true do
+		task.wait(0.3)
+		if Config.IsPulling or Config.EspLine or Config.EspBox or Config.EspHighlight then
+			local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			if myRoot then
+				local temp = {}
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("BasePart") and obj.Name == Config.TargetPart and obj ~= myRoot and not obj:IsDescendantOf(LocalPlayer.Character) then
+						local isPlayer = false
+						for _, p in ipairs(Players:GetPlayers()) do if p.Character and obj:IsDescendantOf(p.Character) then isPlayer = true break end end
+						
+						if not isPlayer then
+							local dist = (obj.Position - myRoot.Position).Magnitude
+							if dist <= Config.Radius then table.insert(temp, obj) end
+						end
+					end
+				end
+				cachedNPCs = temp
+			end
+		end
+	end
+end)
+
+-- ==========================================
+-- VÒNG LẶP CHÍNH (HEARTBEAT) - HÚT & AIM
+-- ==========================================
+local lastClickTime = 0
+
+RunService.Heartbeat:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	
+	local myRoot = char:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	
+	if Config.IsPulling then
+		myRoot.Velocity = Vector3.new(myRoot.Velocity.X, 0, myRoot.Velocity.Z)
+		myRoot.CFrame = CFrame.new(myRoot.Position.X, Config.FixedY, myRoot.Position.Z)
+		
+		if Config.AutoFire then
+			local t = os.clock()
+			if t - lastClickTime >= 0.1 then
+				lastClickTime = t
+				VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+				task.wait(0.01)
+				VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+			end
+		end
+		
+		local targetPos
+		if Config.PositionMode == "Trên đầu" then
+			targetPos = myRoot.Position + Vector3.new(0, Config.MobDistance, 0)
+		else
+			targetPos = myRoot.Position + (myRoot.CFrame.LookVector * Config.MobDistance)
+		end
+		
+		local closestPart, minDist = nil, math.huge
+		
+		for _, part in ipairs(cachedNPCs) do
+			if part and part.Parent then
+				part.CFrame = CFrame.new(targetPos)
+				local dist = (part.Position - myRoot.Position).Magnitude
+				if dist < minDist then minDist = dist closestPart = part end
+				
+				drawESP(part)
+			end
+		end
+		
+		if Config.AimHead and closestPart then
+			local cam = workspace.CurrentCamera
+			if cam then cam.CFrame = CFrame.new(cam.CFrame.Position, closestPart.Position) end
+		end
+	end
+end)
