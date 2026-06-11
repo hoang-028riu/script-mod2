@@ -1,0 +1,1382 @@
+--[[
+    ===================================================================
+    📱 VISUALS & ESP PRO - MOBILE EXCLUSIVE EDITION (WITH VIRTUAL D-PAD) 📱
+    ===================================================================
+    - Giao diện: Tối ưu kích thước cho màn hình cảm ứng điện thoại, bo góc hiện đại.
+    - Kéo thả: Hỗ trợ vuốt chạm kéo thả bảng điều khiển và nút LOGO cực nhạy.
+    - Hệ thống di chuyển di động:
+      + Khi bật FLY hoặc FREECAM, tự động hiện D-Pad ảo (Nút cảm ứng trên màn hình).
+      + Người chơi di động không cần bàn phím vẫn bay và thám thính dễ dàng.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip.
+    - Thiết kế & Tối ưu hóa Touch bởi Gemini.
+]]
+
+-- Ngăn chặn chạy trùng lặp GUI
+if game:GetService("CoreGui"):FindFirstChild("VisualsProGuiMobile") or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("VisualsProGuiMobile") then
+    pcall(function()
+        game:GetService("CoreGui"):FindFirstChild("VisualsProGuiMobile"):Destroy()
+        game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("VisualsProGuiMobile"):Destroy()
+    end)
+end
+
+-- // KHAI BÁO DỊCH VỤ //
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- // CONFIGS & STATES //
+local Settings = {
+    ESP_Enabled = true,
+    Box_Enabled = false,
+    Name_Enabled = false,
+    Distance_Enabled = false,
+    Chams_Enabled = false,
+    Tracers_Enabled = false,
+    Team_Check = false,
+    
+    Xray_Enabled = false,
+    Fullbright_Enabled = false,
+    Freecam_Enabled = false,
+    Fly_Enabled = false,
+    Noclip_Enabled = false,
+    
+    WalkSpeed_Enabled = false,
+    WalkSpeed_Value = 16,
+    Fly_Speed = 50,
+    
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Màu chủ đạo (Cyan Neon)
+    Auto_Reexecute = true
+}
+
+local ESP_Storage = {}
+local OriginalTransparency = {}
+local OriginalSettings = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd
+}
+
+-- Trạng thái nút ảo D-pad di động
+local TouchStates = {
+    Forward = false,
+    Backward = false,
+    Left = false,
+    Right = false,
+    Up = false,
+    Down = false
+}
+
+-- ================================================================= --
+-- 🔄 CƠ CHẾ FIXLOST (AUTO-REEXECUTE ON TELEPORT)
+-- ================================================================= --
+local function HookTeleportFixLost()
+    if not Settings.Auto_Reexecute then return end
+    
+    local queue_func = queue_on_teleport or 
+                       (syn and syn.queue_on_teleport) or 
+                       (fluxus and fluxus.queue_on_teleport) or 
+                       (KRNL_LOADED and queue_on_teleport)
+
+    if queue_func then
+        local currentLoadstring = _G.CustomScriptLoadstring or [[
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+        ]]
+        LocalPlayer.OnTeleport:Connect(function(state)
+            queue_func(currentLoadstring)
+        end)
+    else
+        warn("[FixLost]: Executor không hỗ trợ queue_on_teleport!")
+    end
+end
+
+task.spawn(HookTeleportFixLost)
+
+
+-- ================================================================= --
+-- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (GUI SETUP)
+-- ================================================================= --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "VisualsProGuiMobile"
+ScreenGui.ResetOnSpawn = false
+
+local success, _ = pcall(function()
+    ScreenGui.Parent = CoreGui
+end)
+if not success then
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Khung chứa thông báo góc màn hình (Responsive cho Mobile)
+local NotificationHolder = Instance.new("Frame")
+NotificationHolder.Name = "NotificationHolder"
+NotificationHolder.Parent = ScreenGui
+NotificationHolder.BackgroundTransparency = 1
+NotificationHolder.Position = UDim2.new(1, -210, 0.05, 0)
+NotificationHolder.Size = UDim2.new(0, 190, 0.8, 0)
+
+local NHLayout = Instance.new("UIListLayout")
+NHLayout.Parent = NotificationHolder
+NHLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NHLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+NHLayout.Padding = UDim.new(0, 6)
+
+local function ShowJoinNotification(player)
+    if player == LocalPlayer then return end
+
+    local toast = Instance.new("Frame")
+    toast.Size = UDim2.new(1, 0, 0, 40)
+    toast.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+    toast.BackgroundTransparency = 1
+    toast.Position = UDim2.new(1.3, 0, 0, 0)
+    toast.Parent = NotificationHolder
+
+    local toastCorner = Instance.new("UICorner")
+    toastCorner.CornerRadius = UDim.new(0, 6)
+    toastCorner.Parent = toast
+
+    local toastStroke = Instance.new("UIStroke")
+    toastStroke.Color = Settings.Theme_Color
+    toastStroke.Thickness = 1
+    toastStroke.Transparency = 1
+    toastStroke.Parent = toast
+
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Size = UDim2.new(0, 25, 1, 0)
+    iconLabel.Position = UDim2.new(0, 6, 0, 0)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Text = "📥"
+    iconLabel.TextSize = 14
+    iconLabel.Font = Enum.Font.GothamBold
+    iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    iconLabel.Parent = toast
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -35, 1, 0)
+    textLabel.Position = UDim2.new(0, 31, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Text = player.DisplayName .. "\nđã vào server!"
+    textLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
+    textLabel.TextSize = 10
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.TextTransparency = 1
+    textLabel.Parent = toast
+
+    TweenService:Create(toast, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0,
+        Position = UDim2.new(0, 0, 0, 0)
+    }):Play()
+    TweenService:Create(toastStroke, TweenInfo.new(0.3), {Transparency = 0}):Play()
+    TweenService:Create(textLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+
+    task.delay(4, function()
+        local fadeTween = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1.3, 0, 0, 0)
+        })
+        TweenService:Create(toastStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
+        TweenService:Create(textLabel, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        
+        fadeTween:Play()
+        fadeTween.Completed:Connect(function()
+            toast:Destroy()
+        end)
+    end)
+end
+
+-- Nút Thu Nhỏ (Floating Toggle Button - LOGO - MOBILE LUÔN HIỆN BAN ĐẦU ĐỂ TRÁNH MẤT)
+local MiniButton = Instance.new("TextButton")
+MiniButton.Name = "MiniButton"
+MiniButton.Parent = ScreenGui
+MiniButton.Size = UDim2.new(0, 48, 0, 48)
+MiniButton.Position = UDim2.new(0.03, 0, 0.15, 0)
+MiniButton.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+MiniButton.Text = "👁️"
+MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MiniButton.TextSize = 22
+MiniButton.Font = Enum.Font.GothamBold
+MiniButton.Visible = true -- Mobile luôn bật sẵn nút con mắt để dễ bật tắt
+
+local MiniCorner = Instance.new("UICorner")
+MiniCorner.CornerRadius = UDim.new(0.5, 0)
+MiniCorner.Parent = MiniButton
+
+local MiniStroke = Instance.new("UIStroke")
+MiniStroke.Color = Settings.Theme_Color
+MiniStroke.Thickness = 2
+MiniStroke.Parent = MiniButton
+
+-- Khung Giao Diện Chính (Thiết kế thon gọn hơn cho Mobile)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+MainFrame.Position = UDim2.new(0.5, -220, 0.5, -150)
+MainFrame.Size = UDim2.new(0, 440, 0, 300) -- Nhỏ hơn bản PC để tránh tràn màn hình điện thoại
+MainFrame.Active = true
+MainFrame.Visible = false -- Khởi động ẩn bảng chính, người dùng bấm nút mắt 👁️ để hiện
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(40, 40, 45)
+MainStroke.Thickness = 1
+MainStroke.Parent = MainFrame
+
+-- Thanh Tiêu Đề
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = TitleBar
+
+local TitleCheater = Instance.new("Frame")
+TitleCheater.Size = UDim2.new(1, 0, 0, 8)
+TitleCheater.Position = UDim2.new(0, 0, 1, -8)
+TitleCheater.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+TitleCheater.BorderSizePixel = 0
+TitleCheater.Parent = TitleBar
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Parent = TitleBar
+TitleText.BackgroundTransparency = 1
+TitleText.Position = UDim2.new(0, 12, 0, 0)
+TitleText.Size = UDim2.new(0.7, 0, 1, 0)
+TitleText.Font = Enum.Font.GothamBold
+TitleText.Text = "VISUALS PRO MOBILE"
+TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleText.TextSize = 14
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = TitleBar
+CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 18
+CloseBtn.Font = Enum.Font.GothamBold
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 4)
+CloseCorner.Parent = CloseBtn
+
+-- Sidebar cho Mobile
+local Sidebar = Instance.new("Frame")
+Sidebar.Name = "Sidebar"
+Sidebar.Parent = MainFrame
+Sidebar.BackgroundColor3 = Color3.fromRGB(11, 11, 14)
+Sidebar.Position = UDim2.new(0, 0, 0, 40)
+Sidebar.Size = UDim2.new(0, 120, 1, -40)
+
+local SidebarCorner = Instance.new("UICorner")
+SidebarCorner.CornerRadius = UDim.new(0, 8)
+SidebarCorner.Parent = Sidebar
+
+local Container = Instance.new("Frame")
+Container.Name = "Container"
+Container.Parent = MainFrame
+Container.BackgroundTransparency = 1
+Container.Position = UDim2.new(0, 125, 0, 45)
+Container.Size = UDim2.new(1, -130, 1, -50)
+
+-- Tạo các Trang cuộn nội dung
+local Pages = {}
+local function CreatePage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name .. "Page"
+    page.Parent = Container
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = Settings.Theme_Color
+    page.Visible = false
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = page
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 5)
+    
+    Pages[name] = page
+    return page
+end
+
+local ESPPage = CreatePage("ESP")
+local WorldPage = CreatePage("World")
+local ToolsPage = CreatePage("Tools")
+local SettingsPage = CreatePage("Settings")
+
+-- HỆ THỐNG PHÂN CHIA TAB
+local SidebarLayout = Instance.new("UIListLayout")
+SidebarLayout.Parent = Sidebar
+SidebarLayout.Padding = UDim.new(0, 4)
+SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local TabButtons = {}
+local function CreateTab(name, icon)
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Parent = Sidebar
+    tabBtn.Size = UDim2.new(0.9, 0, 0, 32)
+    tabBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    tabBtn.Text = icon .. "  " .. name
+    tabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    tabBtn.Font = Enum.Font.GothamSemibold
+    tabBtn.TextSize = 11
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = tabBtn
+    
+    tabBtn.MouseButton1Click:Connect(function()
+        for tName, page in pairs(Pages) do
+            page.Visible = false
+        end
+        for _, btn in pairs(TabButtons) do
+            btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+            btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
+        Pages[name].Visible = true
+        tabBtn.BackgroundColor3 = Settings.Theme_Color
+        tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    
+    TabButtons[name] = tabBtn
+end
+
+CreateTab("ESP", "👁️")
+CreateTab("World", "🌐")
+CreateTab("Tools", "🛠️")
+CreateTab("Settings", "⚙️")
+
+Pages["ESP"].Visible = true
+TabButtons["ESP"].BackgroundColor3 = Settings.Theme_Color
+TabButtons["ESP"].TextColor3 = Color3.fromRGB(255, 255, 255)
+
+
+-- ================================================================= --
+-- 📱 HỆ THỐNG NÚT ẢO D-PAD ĐIỀU KHIỂN CHO MOBILE (TOUCH CONTROLS)
+-- ================================================================= --
+local DPadFrame = Instance.new("Frame")
+DPadFrame.Name = "DPadFrame"
+DPadFrame.Parent = ScreenGui
+DPadFrame.Size = UDim2.new(0, 160, 0, 160)
+DPadFrame.Position = UDim2.new(0.75, -80, 0.6, -80)
+DPadFrame.BackgroundTransparency = 1
+DPadFrame.Visible = false -- Chỉ hiện khi bật Fly hoặc Freecam
+
+local function CreateDPadButton(name, text, size, pos)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Parent = DPadFrame
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    btn.BackgroundTransparency = 0.3
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Settings.Theme_Color
+    stroke.Thickness = 1.5
+    stroke.Parent = btn
+
+    -- Lắng nghe cảm ứng nhấn giữ và thả
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TouchStates[name] = true
+            btn.BackgroundColor3 = Settings.Theme_Color
+        end
+    end)
+
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TouchStates[name] = false
+            btn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+        end
+    end)
+    
+    return btn
+end
+
+-- Tạo sơ đồ nút D-Pad ảo
+local btnSize = UDim2.new(0, 42, 0, 42)
+CreateDPadButton("Forward", "▲", btnSize, UDim2.new(0.5, -21, 0, 0))
+CreateDPadButton("Left", "◀", btnSize, UDim2.new(0, 10, 0.5, -21))
+CreateDPadButton("Right", "▶", btnSize, UDim2.new(1, -52, 0.5, -21))
+CreateDPadButton("Backward", "▼", btnSize, UDim2.new(0.5, -21, 1, -42))
+CreateDPadButton("Up", "▲+", btnSize, UDim2.new(0, 10, 0, 0))
+CreateDPadButton("Down", "▼-", btnSize, UDim2.new(1, -52, 1, -42))
+
+-- Cập nhật ẩn/hiện D-Pad ảo một cách thông minh
+local function UpdateDPadVisibility()
+    if Settings.Fly_Enabled or Settings.Freecam_Enabled then
+        DPadFrame.Visible = true
+    else
+        DPadFrame.Visible = false
+    end
+end
+
+
+-- ================================================================= --
+-- 🛠️ CÁC THÀNH PHẦN GUI ĐẶC TRƯNG CHO DI ĐỘNG
+-- ================================================================= --
+
+-- 1. Tạo Nút Bật/Tắt (Toggle Switch)
+local function CreateToggle(parentPage, text, settingKey, callback)
+    local toggleFrame = Instance.new("Frame")
+    toggleFrame.Parent = parentPage
+    toggleFrame.Size = UDim2.new(1, -10, 0, 36)
+    toggleFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    
+    local tfCorner = Instance.new("UICorner")
+    tfCorner.CornerRadius = UDim.new(0, 5)
+    tfCorner.Parent = toggleFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Parent = toggleFrame
+    label.BackgroundTransparency = 1
+    label.Position = UDim2.new(0, 10, 0, 0)
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Font = Enum.Font.GothamMedium
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(210, 210, 215)
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local switch = Instance.new("TextButton")
+    switch.Parent = toggleFrame
+    switch.Position = UDim2.new(1, -46, 0.5, -9)
+    switch.Size = UDim2.new(0, 38, 0, 18)
+    switch.BackgroundColor3 = Settings[settingKey] and Settings.Theme_Color or Color3.fromRGB(45, 45, 50)
+    switch.Text = ""
+    
+    local swCorner = Instance.new("UICorner")
+    swCorner.CornerRadius = UDim.new(0.5, 0)
+    swCorner.Parent = switch
+    
+    local indicator = Instance.new("Frame")
+    indicator.Parent = switch
+    indicator.Size = UDim2.new(0, 12, 0, 12)
+    indicator.Position = Settings[settingKey] and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
+    indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    
+    local indCorner = Instance.new("UICorner")
+    indCorner.CornerRadius = UDim.new(0.5, 0)
+    indCorner.Parent = indicator
+    
+    switch.MouseButton1Click:Connect(function()
+        Settings[settingKey] = not Settings[settingKey]
+        
+        local targetPos = Settings[settingKey] and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
+        local targetColor = Settings[settingKey] and Settings.Theme_Color or Color3.fromRGB(45, 45, 50)
+        
+        TweenService:Create(indicator, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        TweenService:Create(switch, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = targetColor}):Play()
+        
+        if callback then callback(Settings[settingKey]) end
+    end)
+end
+
+-- 2. Tạo Thanh Kéo Tốc độ (Slider mượt cho Touch Screen)
+local function CreateSlider(parentPage, text, min, max, default, callback)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Parent = parentPage
+    sliderFrame.Size = UDim2.new(1, -10, 0, 48)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    
+    local sfCorner = Instance.new("UICorner")
+    sfCorner.CornerRadius = UDim.new(0, 5)
+    sfCorner.Parent = sliderFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Parent = sliderFrame
+    label.BackgroundTransparency = 1
+    label.Position = UDim2.new(0, 10, 0, 4)
+    label.Size = UDim2.new(0.6, 0, 0, 18)
+    label.Font = Enum.Font.GothamMedium
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(210, 210, 215)
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local valLabel = Instance.new("TextLabel")
+    valLabel.Parent = sliderFrame
+    valLabel.BackgroundTransparency = 1
+    valLabel.Position = UDim2.new(0.6, 0, 0, 4)
+    valLabel.Size = UDim2.new(0.4, -10, 0, 18)
+    valLabel.Font = Enum.Font.GothamBold
+    valLabel.Text = tostring(default)
+    valLabel.TextColor3 = Settings.Theme_Color
+    valLabel.TextSize = 12
+    valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    
+    local sliderBar = Instance.new("TextButton")
+    sliderBar.Parent = sliderFrame
+    sliderBar.Position = UDim2.new(0, 10, 0, 28)
+    sliderBar.Size = UDim2.new(1, -20, 0, 6)
+    sliderBar.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    sliderBar.Text = ""
+    
+    local sbCorner = Instance.new("UICorner")
+    sbCorner.CornerRadius = UDim.new(1, 0)
+    sbCorner.Parent = sliderBar
+    
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Parent = sliderBar
+    sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Settings.Theme_Color
+    
+    local sfCorner2 = Instance.new("UICorner")
+    sfCorner2.CornerRadius = UDim.new(1, 0)
+    sfCorner2.Parent = sliderFill
+    
+    local sliderKnob = Instance.new("Frame")
+    sliderKnob.Parent = sliderBar
+    sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+    sliderKnob.Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0)
+    sliderKnob.Size = UDim2.new(0, 14, 0, 14) -- Khuyên dùng Knob lớn hơn trên điện thoại để dễ chạm
+    sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    
+    local skCorner = Instance.new("UICorner")
+    skCorner.CornerRadius = UDim.new(1, 0)
+    skCorner.Parent = sliderKnob
+    
+    local dragging = false
+    
+    local function updateValue(input)
+        local percentage = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+        sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+        sliderKnob.Position = UDim2.new(percentage, 0, 0.5, 0)
+        
+        local value = math.round(min + (max - min) * percentage)
+        valLabel.Text = tostring(value)
+        
+        if callback then
+            callback(value)
+        end
+    end
+    
+    sliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            updateValue(input)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateValue(input)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- 3. Tạo Nút nhấn (Button)
+local function CreateButton(parentPage, text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Parent = parentPage
+    btn.Size = UDim2.new(1, -10, 0, 34)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(235, 235, 240)
+    btn.TextSize = 12
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- 4. Tạo Section Header
+local function CreateSection(parentPage, text)
+    local label = Instance.new("TextLabel")
+    label.Parent = parentPage
+    label.Size = UDim2.new(1, -10, 0, 22)
+    label.BackgroundTransparency = 1
+    label.Text = "  " .. text:upper()
+    label.TextColor3 = Settings.Theme_Color
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+
+-- ================================================================= --
+-- 🎯 CHỨC NĂNG ESP DI ĐỘNG KHÔNG LỖI RE-SPAWN (BUG-FREE MOBILE ESP)
+-- ================================================================= --
+local function CleanPlayerESP(player)
+    if ESP_Storage[player] then
+        if ESP_Storage[player].Connections then
+            for _, conn in ipairs(ESP_Storage[player].Connections) do
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        if ESP_Storage[player].Objects then
+            for _, obj in pairs(ESP_Storage[player].Objects) do
+                pcall(function()
+                    if obj.Remove then obj:Remove() else obj:Destroy() end
+                end)
+            end
+        end
+        ESP_Storage[player] = nil
+    end
+end
+
+local function ApplyESPToPlayer(player)
+    if player == LocalPlayer then return end
+    CleanPlayerESP(player)
+    
+    ESP_Storage[player] = {
+        Objects = {},
+        Connections = {}
+    }
+    
+    local function onCharacterAdded(char)
+        if ESP_Storage[player] and ESP_Storage[player].Objects then
+            for _, obj in pairs(ESP_Storage[player].Objects) do
+                pcall(function()
+                    if obj.Remove then obj:Remove() else obj:Destroy() end
+                end)
+            end
+            table.clear(ESP_Storage[player].Objects)
+        end
+        
+        local objects = ESP_Storage[player] and ESP_Storage[player].Objects
+        if not objects then return end
+        
+        -- 1. Chams
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.FillColor = player.TeamColor and player.TeamColor.Color or Color3.fromRGB(255, 50, 50)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.4
+        highlight.OutlineTransparency = 0.1
+        highlight.Enabled = Settings.Chams_Enabled
+        highlight.Parent = char
+        objects.Highlight = highlight
+
+        -- 2. Billboard Name/Distance
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP_Billboard"
+        billboard.AlwaysOnTop = true
+        billboard.Size = UDim2.new(0, 100, 0, 45)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Parent = billboard
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.fromRGB(255, 255, 255)
+        textLabel.TextStrokeTransparency = 0
+        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextSize = 11
+        textLabel.Visible = Settings.Name_Enabled or Settings.Distance_Enabled
+        objects.Label = textLabel
+        objects.Billboard = billboard
+
+        -- 3. Box ESP
+        local boxBillboard = Instance.new("BillboardGui")
+        boxBillboard.Name = "ESP_BoxBillboard"
+        boxBillboard.AlwaysOnTop = true
+        boxBillboard.Size = UDim2.new(4.2, 0, 5.6, 0)
+        
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Parent = boxBillboard
+        boxFrame.Size = UDim2.new(1, 0, 1, 0)
+        boxFrame.BackgroundTransparency = 1
+        boxFrame.BorderColor3 = player.TeamColor and player.TeamColor.Color or Settings.Theme_Color
+        boxFrame.BorderSizePixel = 1.5
+        boxFrame.Visible = Settings.Box_Enabled
+        
+        local innerStroke = Instance.new("UIStroke")
+        innerStroke.Color = Color3.fromRGB(0, 0, 0)
+        innerStroke.Thickness = 0.5
+        innerStroke.Parent = boxFrame
+        objects.Box = boxBillboard
+
+        -- 4. Tracers (Vẽ bằng Drawing API nếu executor di động hỗ trợ)
+        local tracerLine
+        if Drawing then
+            tracerLine = Drawing.new("Line")
+            tracerLine.Visible = false
+            tracerLine.Color = player.TeamColor and player.TeamColor.Color or Settings.Theme_Color
+            tracerLine.Thickness = 1.2
+            tracerLine.Transparency = 0.8
+            objects.Tracer = tracerLine
+        end
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            if not player or not player.Parent or player.Character ~= char then
+                renderConn:Disconnect()
+                return
+            end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local isFriendly = Settings.Team_Check and player.Team == LocalPlayer.Team
+            
+            if not hrp or not hum or hum.Health <= 0 or isFriendly then
+                if billboard.Parent then billboard.Parent = nil end
+                if boxBillboard.Parent then boxBillboard.Parent = nil end
+                if highlight.Parent then highlight.Parent = nil end
+                if tracerLine then tracerLine.Visible = false end
+                return
+            end
+
+            if Settings.Chams_Enabled and Settings.ESP_Enabled then
+                if highlight.Parent ~= char then highlight.Parent = char end
+                highlight.Enabled = true
+            else
+                highlight.Enabled = false
+            end
+
+            if (Settings.Name_Enabled or Settings.Distance_Enabled) and Settings.ESP_Enabled then
+                if billboard.Parent ~= hrp then billboard.Parent = hrp end
+                textLabel.Visible = true
+                
+                local distance = math.clamp(math.floor((LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) or 0), 0, 99999)
+                
+                local textStr = ""
+                if Settings.Name_Enabled then textStr = textStr .. player.DisplayName end
+                if Settings.Distance_Enabled then textStr = textStr .. "\n[" .. distance .. "m]" end
+                
+                textLabel.Text = textStr
+            else
+                if billboard.Parent then billboard.Parent = nil end
+            end
+
+            if Settings.Box_Enabled and Settings.ESP_Enabled then
+                if boxBillboard.Parent ~= hrp then boxBillboard.Parent = hrp end
+                boxFrame.Visible = true
+            else
+                if boxBillboard.Parent then boxBillboard.Parent = nil end
+            end
+
+            if tracerLine then
+                if Settings.Tracers_Enabled and Settings.ESP_Enabled then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                    if onScreen then
+                        tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                        tracerLine.Visible = true
+                    else
+                        tracerLine.Visible = false
+                    end
+                else
+                    tracerLine.Visible = false
+                end
+            end
+        end)
+        
+        table.insert(ESP_Storage[player].Connections, renderConn)
+    end
+    
+    local charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
+    table.insert(ESP_Storage[player].Connections, charAddedConn)
+    
+    if player.Character then
+        task.spawn(onCharacterAdded, player.Character)
+    end
+end
+
+local function InitializeESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        ApplyESPToPlayer(player)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    ApplyESPToPlayer(player)
+    ShowJoinNotification(player)
+end)
+Players.PlayerRemoving:Connect(CleanPlayerESP)
+
+
+-- ================================================================= --
+-- 🌐 THIẾT LẬP NỘI DUNG TỪNG TAB TRÊN MOBILE (TAB CONTENTS)
+-- ================================================================= --
+
+-- --- TAB 1: ESP ---
+CreateSection(ESPPage, "Cấu hình chung")
+CreateToggle(ESPPage, "Bật ESP", "ESP_Enabled")
+CreateToggle(ESPPage, "Đồng đội check", "Team_Check")
+
+CreateSection(ESPPage, "Chế độ xem")
+CreateToggle(ESPPage, "Hiện Khung (Box ESP)", "Box_Enabled")
+CreateToggle(ESPPage, "Hiện Tên (Name)", "Name_Enabled")
+CreateToggle(ESPPage, "Hiện Khoảng Cách", "Distance_Enabled")
+CreateToggle(ESPPage, "Nhìn xuyên tường (Chams)", "Chams_Enabled")
+CreateToggle(ESPPage, "Đường dẫn (Tracers)", "Tracers_Enabled")
+
+
+-- --- TAB 2: WORLD ---
+CreateSection(WorldPage, "Thế giới trực quan")
+
+CreateToggle(WorldPage, "Xray xuyên vật thể", "Xray_Enabled", function(state)
+    if state then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") and not obj.Parent:IsA("Accessory") then
+                if not OriginalTransparency[obj] then
+                    OriginalTransparency[obj] = obj.Transparency
+                end
+                obj.Transparency = 0.5
+            end
+        end
+    else
+        for obj, trans in pairs(OriginalTransparency) do
+            if obj and obj.Parent then
+                obj.Transparency = trans
+            end
+        end
+        table.clear(OriginalTransparency)
+    end
+end)
+
+local lightingConn
+CreateToggle(WorldPage, "Fullbright làm sáng map", "Fullbright_Enabled", function(state)
+    if state then
+        lightingConn = RunService.RenderStepped:Connect(function()
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 12
+            Lighting.FogEnd = 100000
+        end)
+    else
+        if lightingConn then lightingConn:Disconnect() end
+        Lighting.Ambient = OriginalSettings.Ambient
+        Lighting.OutdoorAmbient = OriginalSettings.OutdoorAmbient
+        Lighting.Brightness = OriginalSettings.Brightness
+        Lighting.ClockTime = OriginalSettings.ClockTime
+        Lighting.FogEnd = OriginalSettings.FogEnd
+    end
+end)
+
+
+-- --- TAB 3: TOOLS (CÔNG CỤ DI ĐỘNG) ---
+CreateSection(ToolsPage, "Hệ Thống Tốc Độ")
+
+local speedConn
+local function ApplyWalkSpeed()
+    if speedConn then speedConn:Disconnect() end
+    speedConn = RunService.RenderStepped:Connect(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if Settings.WalkSpeed_Enabled then
+                hum.WalkSpeed = Settings.WalkSpeed_Value
+            end
+        end
+    end)
+end
+
+CreateToggle(ToolsPage, "Tự động gán tốc độ chạy", "WalkSpeed_Enabled", function(state)
+    if state then
+        ApplyWalkSpeed()
+    else
+        if speedConn then speedConn:Disconnect() end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = 16 end
+    end
+end)
+
+CreateSlider(ToolsPage, "Tốc độ chạy (WalkSpeed)", 16, 500, Settings.WalkSpeed_Value, function(value)
+    Settings.WalkSpeed_Value = value
+    if Settings.WalkSpeed_Enabled then
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = value end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    if Settings.WalkSpeed_Enabled then ApplyWalkSpeed() end
+end)
+
+
+CreateSection(ToolsPage, "Hệ Thống Bay & Xuyên Tường")
+
+local flyConn
+local bodyGyro, bodyVelocity
+
+local function StopFly()
+    if flyConn then flyConn:Disconnect() end
+    if bodyGyro then bodyGyro:Destroy() end
+    if bodyVelocity then bodyVelocity:Destroy() end
+    
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = false end
+    UpdateDPadVisibility()
+end
+
+-- logic Fly bằng nút ảo trên Mobile
+local function StartFly()
+    StopFly()
+    
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.P = 9e4
+    bodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.cframe = hrp.CFrame
+    bodyGyro.Parent = hrp
+
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+    bodyVelocity.Parent = hrp
+
+    UpdateDPadVisibility()
+
+    flyConn = RunService.RenderStepped:Connect(function()
+        if not Settings.Fly_Enabled or not hrp or not hum or hum.Health <= 0 then
+            Settings.Fly_Enabled = false
+            StopFly()
+            return
+        end
+
+        bodyGyro.cframe = Camera.CFrame
+
+        -- Nhận hướng di chuyển từ phím ảo Mobile
+        local moveDir = Vector3.new(0, 0, 0)
+        if TouchStates.Forward then
+            moveDir = moveDir + Camera.CFrame.LookVector
+        end
+        if TouchStates.Backward then
+            moveDir = moveDir - Camera.CFrame.LookVector
+        end
+        if TouchStates.Left then
+            moveDir = moveDir - Camera.CFrame.RightVector
+        end
+        if TouchStates.Right then
+            moveDir = moveDir + Camera.CFrame.RightVector
+        end
+        if TouchStates.Up then
+            moveDir = moveDir + Vector3.new(0, 1, 0)
+        end
+        if TouchStates.Down then
+            moveDir = moveDir - Vector3.new(0, 1, 0)
+        end
+
+        if moveDir.Magnitude > 0 then
+            bodyVelocity.velocity = moveDir.Unit * Settings.Fly_Speed
+        else
+            bodyVelocity.velocity = Vector3.new(0, 0, 0)
+        end
+    end)
+end
+
+CreateToggle(ToolsPage, "Bật Bay (Sử dụng phím ảo D-Pad)", "Fly_Enabled", function(state)
+    if state then
+        StartFly()
+    else
+        StopFly()
+    end
+end)
+
+CreateSlider(ToolsPage, "Tốc độ bay (FlySpeed)", 10, 500, Settings.Fly_Speed, function(value)
+    Settings.Fly_Speed = value
+end)
+
+-- Noclip xuyên tường
+local noclipConn
+CreateToggle(ToolsPage, "Bật đi xuyên tường (Noclip)", "Noclip_Enabled", function(state)
+    if state then
+        noclipConn = RunService.Stepped:Connect(function()
+            if not Settings.Noclip_Enabled then
+                if noclipConn then noclipConn:Disconnect() end
+                return
+            end
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect() end
+    end
+end)
+
+
+CreateSection(ToolsPage, "Camera & Thám Thính")
+
+-- Freecam cho Mobile
+local freecamConn = nil
+local fSpeed = 1
+CreateToggle(ToolsPage, "Bật Freecam (Body đứng yên)", "Freecam_Enabled", function(state)
+    if state then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = true
+        end
+        
+        Camera.CameraType = Enum.CameraType.Scriptable
+        UpdateDPadVisibility()
+
+        freecamConn = RunService.RenderStepped:Connect(function()
+            if not Settings.Freecam_Enabled then
+                if freecamConn then freecamConn:Disconnect() end
+                return
+            end
+
+            -- Nhận hướng di chuyển Camera từ nút ảo
+            local moveDir = Vector3.new(0, 0, 0)
+            if TouchStates.Forward then moveDir = moveDir + Camera.CFrame.LookVector end
+            if TouchStates.Backward then moveDir = moveDir - Camera.CFrame.LookVector end
+            if TouchStates.Left then moveDir = moveDir - Camera.CFrame.RightVector end
+            if TouchStates.Right then moveDir = moveDir + Camera.CFrame.RightVector end
+            if TouchStates.Up then moveDir = moveDir + Vector3.new(0, 1, 0) end
+            if TouchStates.Down then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+            if moveDir.Magnitude > 0 then
+                Camera.CFrame = Camera.CFrame + (moveDir.Unit * fSpeed)
+            end
+        end)
+    else
+        if freecamConn then freecamConn:Disconnect() end
+        
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+        end
+        
+        Camera.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        end
+        UpdateDPadVisibility()
+    end
+end)
+
+-- Ô tìm kiếm Spectate
+local SpectateFrame = Instance.new("Frame")
+SpectateFrame.Parent = ToolsPage
+SpectateFrame.Size = UDim2.new(1, -10, 0, 36)
+SpectateFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+
+local SpecCorner = Instance.new("UICorner")
+SpecCorner.CornerRadius = UDim.new(0, 5)
+SpecCorner.Parent = SpectateFrame
+
+local SpecInput = Instance.new("TextBox")
+SpecInput.Parent = SpectateFrame
+SpecInput.Size = UDim2.new(0.5, -10, 1, 0)
+SpecInput.Position = UDim2.new(0, 10, 0, 0)
+SpecInput.BackgroundTransparency = 1
+SpecInput.TextColor3 = Color3.new(1, 1, 1)
+SpecInput.PlaceholderText = "Tìm tên..."
+SpecInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+SpecInput.Font = Enum.Font.GothamMedium
+SpecInput.Text = ""
+SpecInput.TextSize = 11
+SpecInput.TextXAlignment = Enum.TextXAlignment.Left
+
+local SpecBtn = Instance.new("TextButton")
+SpecBtn.Parent = SpectateFrame
+SpecBtn.Size = UDim2.new(0.22, -5, 0, 26)
+SpecBtn.Position = UDim2.new(0.5, 5, 0.5, -13)
+SpecBtn.BackgroundColor3 = Settings.Theme_Color
+SpecBtn.Font = Enum.Font.GothamBold
+SpecBtn.Text = "Xem"
+SpecBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpecBtn.TextSize = 11
+
+local SpecBtnCorner = Instance.new("UICorner")
+SpecBtnCorner.CornerRadius = UDim.new(0, 4)
+SpecBtnCorner.Parent = SpecBtn
+
+local UnspecBtn = Instance.new("TextButton")
+UnspecBtn.Parent = SpectateFrame
+UnspecBtn.Size = UDim2.new(0.22, 0, 0, 26)
+UnspecBtn.Position = UDim2.new(0.72, 10, 0.5, -13)
+UnspecBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+UnspecBtn.Font = Enum.Font.GothamBold
+UnspecBtn.Text = "Hủy"
+UnspecBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnspecBtn.TextSize = 11
+
+local UnspecCorner = Instance.new("UICorner")
+UnspecCorner.CornerRadius = UDim.new(0, 4)
+UnspecCorner.Parent = UnspecBtn
+
+local function FindPlayer(name)
+    name = name:lower()
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v.Name:lower():sub(1, #name) == name or v.DisplayName:lower():sub(1, #name) == name then
+            return v
+        end
+    end
+    return nil
+end
+
+SpecBtn.MouseButton1Click:Connect(function()
+    local target = FindPlayer(SpecInput.Text)
+    if target and target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+        Camera.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
+        SpecInput.Text = target.DisplayName
+    end
+end)
+
+UnspecBtn.MouseButton1Click:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    end
+end)
+
+
+-- --- 📊 DANH SÁCH NGƯỜI CHƠI ---
+CreateSection(ToolsPage, "Danh sách người chơi (Quét 5s)")
+
+local PlayerListContainer = Instance.new("ScrollingFrame")
+PlayerListContainer.Parent = ToolsPage
+PlayerListContainer.Size = UDim2.new(1, -10, 0, 130)
+PlayerListContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+PlayerListContainer.ScrollBarThickness = 3
+PlayerListContainer.ScrollBarImageColor3 = Settings.Theme_Color
+
+local PlcCorner = Instance.new("UICorner")
+PlcCorner.CornerRadius = UDim.new(0, 6)
+PlcCorner.Parent = PlayerListContainer
+
+local PlcLayout = Instance.new("UIListLayout")
+PlcLayout.Parent = PlayerListContainer
+PlcLayout.SortOrder = Enum.SortOrder.Name
+PlcLayout.Padding = UDim.new(0, 3)
+
+local function RefreshPlayerListUI()
+    for _, child in ipairs(PlayerListContainer:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local item = Instance.new("Frame")
+            item.Name = player.Name
+            item.Parent = PlayerListContainer
+            item.Size = UDim2.new(1, -6, 0, 32)
+            item.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+            
+            local itemCorner = Instance.new("UICorner")
+            itemCorner.CornerRadius = UDim.new(0, 4)
+            itemCorner.Parent = item
+            
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Parent = item
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Position = UDim2.new(0, 8, 0, 0)
+            nameLabel.Size = UDim2.new(0.55, 0, 1, 0)
+            nameLabel.Font = Enum.Font.GothamMedium
+            nameLabel.Text = player.DisplayName
+            nameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+            nameLabel.TextSize = 11
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+            -- Nút Spectate nhanh
+            local specButton = Instance.new("TextButton")
+            specButton.Parent = item
+            specButton.Size = UDim2.new(0, 24, 0, 24)
+            specButton.Position = UDim2.new(1, -58, 0.5, -12)
+            specButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            specButton.Text = "👁️"
+            specButton.TextSize = 12
+            specButton.Font = Enum.Font.GothamBold
+            
+            local sbCorner = Instance.new("UICorner")
+            sbCorner.CornerRadius = UDim.new(0, 4)
+            sbCorner.Parent = specButton
+
+            specButton.MouseButton1Click:Connect(function()
+                if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                    Camera.CameraSubject = player.Character:FindFirstChildOfClass("Humanoid")
+                end
+            end)
+
+            -- Nút dịch chuyển Cam Freecam tới vị trí người chơi
+            local teleportCamButton = Instance.new("TextButton")
+            teleportCamButton.Parent = item
+            teleportCamButton.Size = UDim2.new(0, 24, 0, 24)
+            teleportCamButton.Position = UDim2.new(1, -28, 0.5, -12)
+            teleportCamButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            teleportCamButton.Text = "📍"
+            teleportCamButton.TextSize = 12
+            teleportCamButton.Font = Enum.Font.GothamBold
+            
+            local tbCorner = Instance.new("UICorner")
+            tbCorner.CornerRadius = UDim.new(0, 4)
+            tbCorner.Parent = teleportCamButton
+
+            teleportCamButton.MouseButton1Click:Connect(function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetHrp = player.Character.HumanoidRootPart
+                    Camera.CFrame = CFrame.new(targetHrp.Position + Vector3.new(0, 3, 5), targetHrp.Position)
+                end
+            end)
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        pcall(RefreshPlayerListUI)
+        task.wait(5)
+    end
+end)
+
+
+-- --- TAB 4: SETTINGS ---
+CreateSection(SettingsPage, "Hệ Thống Tránh Mất Script")
+CreateToggle(SettingsPage, "FixLost: Tự động chạy lại", "Auto_Reexecute", function(state)
+    if state then HookTeleportFixLost() end
+end)
+
+CreateSection(SettingsPage, "Server Options")
+CreateButton(SettingsPage, "Server Hop (Đổi Server công khai)", function()
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService = game:GetService("HttpService")
+    local PlaceId = game.PlaceId
+    
+    local success, serverList = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    end)
+    
+    if success and serverList and serverList.data then
+        for _, server in ipairs(serverList.data) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                break
+            end
+        end
+    end
+end)
+
+CreateButton(SettingsPage, "Rejoin Server (Vào lại nhanh)", function()
+    local TeleportService = game:GetService("TeleportService")
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
+
+
+-- ================================================================= --
+-- 🤝 TƯƠNG TÁC NGƯỜI DÙNG (KÉO THẢ MAIN & LOGO MƯỢT MÀ DI ĐỘNG)
+-- ================================================================= --
+
+-- Kéo thả bảng điều khiển bằng Touch (Vuốt ngón tay)
+local dragToggle, dragStart, startPos
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    local position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    TweenService:Create(MainFrame, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = position}):Play()
+end
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragToggle = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragToggle = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if dragToggle then
+            updateInput(input)
+        end
+    end
+end)
+
+-- Kéo thả nút con mắt LOGO (MiniButton) bằng Touch cực nhạy
+local miniDragToggle, miniDragStart, miniStartPos
+local function updateMiniInput(input)
+    local delta = input.Position - miniDragStart
+    local position = UDim2.new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
+    TweenService:Create(MiniButton, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = position}):Play()
+end
+
+MiniButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        miniDragToggle = true
+        miniDragStart = input.Position
+        miniStartPos = MiniButton.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                miniDragToggle = false
+            end
+        end)
+    end
+end)
+
+MiniButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if miniDragToggle then
+            updateMiniInput(input)
+        end
+    end
+end)
+
+-- Đóng và mở bảng điều khiển
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    MiniButton.Visible = true
+end)
+
+MiniButton.MouseButton1Click:Connect(function()
+    -- Mở bảng khi nhấn nhẹ vào nút con mắt
+    MainFrame.Visible = true
+    MiniButton.Visible = false
+end)
+
+
+-- Khởi tạo ESP và nạp danh sách ban đầu
+InitializeESP()
+pcall(RefreshPlayerListUI)
+
+-- Thông báo thành công
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Visuals Mobile Load!";
+    Text = "Nhấn nút 👁️ ở góc màn hình để bắt đầu gian lận!";
+    Duration = 5;
+})
