@@ -4,7 +4,7 @@
     ===================================================================
     - Giao diện: Hiện đại, mượt mà, hỗ trợ CHUYỂN MÀU CẦU VỒNG (RGB) cực đẹp.
     - Kéo thả: Tối ưu cho Chuột (PC) để kéo thả bảng điều khiển và nút LOGO mượt mà.
-    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Pro, Fly, Noclip.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Pro, Fly, Noclip, Continuous Y +1.
     - Phím tắt: 
       + Bật/Tắt Menu: Phím RightShift hoặc bấm nút con mắt 👁️.
       + Bay (Fly): W, A, S, D để bay theo hướng Camera, Space để lên cao, LeftShift để xuống thấp.
@@ -44,6 +44,7 @@ local Settings = {
     Freecam_Enabled = false,
     Fly_Enabled = false,
     Noclip_Enabled = false,
+    ContinuousY_Enabled = false, -- Trạng thái tính năng bay lên liên tục
     
     WalkSpeed_Enabled = false,
     WalkSpeed_Value = 16, -- Tốc độ chạy mặc định của Roblox
@@ -624,7 +625,7 @@ local function ApplyESPToPlayer(player)
         Connections = {}
     }
     
-    -- Hàm tạo các thực thể vẽ ESP cho từng Nhân Vật (Character) cụ thể
+    -- Hàm tạo các thực thực thể vẽ ESP cho từng Nhân Vật (Character) cụ thể
     local function onCharacterAdded(char)
         -- Trước khi tạo mới cho nhân vật này, dọn sạch đồ họa cũ của nhân vật trước đó
         if ESP_Storage[player] and ESP_Storage[player].Objects then
@@ -1033,6 +1034,30 @@ CreateToggle(ToolsPage, "Bật Đi Xuyên Tường (Noclip)", "Noclip_Enabled", 
         end)
     else
         if noclipConn then noclipConn:Disconnect() end
+    end
+end)
+
+-- 4. TÍNH NĂNG BAY LÊN LIÊN TỤC (Y +1)
+local continuousYConn
+CreateToggle(ToolsPage, "Bay lên liên tục (Y +1)", "ContinuousY_Enabled", function(state)
+    if state then
+        continuousYConn = RunService.Heartbeat:Connect(function()
+            if not Settings.ContinuousY_Enabled then
+                if continuousYConn then continuousYConn:Disconnect() end
+                return
+            end
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                -- Di chuyển tọa độ Y của nhân vật lên thêm 1 studs liên tục
+                hrp.CFrame = hrp.CFrame + Vector3.new(0, 1, 0)
+                -- Triệt tiêu vận tốc rơi tự do để tránh giật lag khi bay lên cao
+                hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+            end
+        end)
+    else
+        if continuousYConn then continuousYConn:Disconnect() end
     end
 end)
 
