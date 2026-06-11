@@ -1,16 +1,13 @@
 --[[
     ===================================================================
-    🌟 VISUALS & ESP PRO - PREMIUM EDITION (WITH INTEGRATED FIXLOST) 🌟
+    🌟 VISUALS & ESP PRO - PC PREMIUM RAINBOW EDITION (WITH FIXLOST) 🌟
     ===================================================================
-    - Giao diện: Hiện đại, mượt mà, hỗ trợ kéo thả cả bảng điều khiển và nút LOGO.
-    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Pro.
-    - Sửa lỗi quan trọng: 
-      + Sửa triệt để lỗi không nhận diện ESP cho người chơi mới tham gia server.
-      + Sửa lỗi mất ESP hoàn toàn sau khi người chơi hồi sinh (respawn/reset).
-      + Tối ưu hóa hiệu năng thu hồi bộ nhớ, không gây sụt giảm FPS.
-      + Tải thông báo góc màn hình khi có người chơi mới tham gia.
-      + Hệ thống Bay (Fly) và Đi xuyên tường (Noclip) cực kỳ mượt mà.
-      + TÍNH NĂNG MỚI: Thêm thanh kéo điều chỉnh tốc độ chạy và tốc độ bay lên tới 500.
+    - Giao diện: Hiện đại, mượt mà, hỗ trợ CHUYỂN MÀU CẦU VỒNG (RGB) cực đẹp.
+    - Kéo thả: Tối ưu cho Chuột (PC) để kéo thả bảng điều khiển và nút LOGO mượt mà.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Pro, Fly, Noclip.
+    - Phím tắt: 
+      + Bật/Tắt Menu: Phím RightShift hoặc bấm nút con mắt 👁️.
+      + Bay (Fly): W, A, S, D để bay theo hướng Camera, Space để lên cao, LeftShift để xuống thấp.
     - Thiết kế & Tối ưu bởi Gemini.
 ]]
 
@@ -52,7 +49,7 @@ local Settings = {
     WalkSpeed_Value = 16, -- Tốc độ chạy mặc định của Roblox
     Fly_Speed = 50, -- Tốc độ bay mặc định
     
-    Theme_Color = Color3.fromRGB(0, 180, 255), -- Màu chủ đạo (Cyan Neon)
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi vòng lặp cầu vồng
     Auto_Reexecute = true -- Mặc định bật tự động giữ script khi đổi server
 }
 
@@ -66,6 +63,12 @@ local OriginalSettings = {
     FogEnd = Lighting.FogEnd
 }
 
+-- Hệ thống đăng ký các thành phần giao diện đổi màu cầu vồng (RGB Rainbow List)
+local RainbowElements = {}
+local function RegisterRainbow(instance, property)
+    table.insert(RainbowElements, {Instance = instance, Property = property})
+end
+
 -- ================================================================= --
 -- 🔄 CƠ CHẾ FIXLOST (AUTO-REEXECUTE ON TELEPORT)
 -- ================================================================= --
@@ -78,7 +81,7 @@ local function HookTeleportFixLost()
                        (KRNL_LOADED and queue_on_teleport)
 
     if queue_func then
-        -- Lưu lại nguồn script này để tự chạy lại
+        -- Lưu lại nguồn script này để tự chạy lại khi đổi server
         local currentLoadstring = _G.CustomScriptLoadstring or [[
             -- Chạy lại chính xác bộ mã nguồn Visuals Pro này
             loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() -- Ví dụ dự phòng
@@ -98,7 +101,7 @@ task.spawn(HookTeleportFixLost)
 
 
 -- ================================================================= --
--- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN NGHIỆP (GUI SETUP)
+-- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN NGHIỆP VỚI RGB (GUI SETUP)
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VisualsProGui"
@@ -145,6 +148,7 @@ local function ShowJoinNotification(player)
     toastStroke.Thickness = 1.5
     toastStroke.Transparency = 1
     toastStroke.Parent = toast
+    RegisterRainbow(toastStroke, "Color")
 
     -- Biểu tượng icon nhập vào
     local iconLabel = Instance.new("TextLabel")
@@ -194,7 +198,7 @@ local function ShowJoinNotification(player)
     end)
 end
 
--- Nút Thu Nhỏ (Floating Toggle Button - LOGO KÉO THẢ ĐƯỢC)
+-- Nút Thu Nhỏ (Floating Toggle Button - LOGO KÉO THẢ ĐƯỢC VỚI VIỀN CẦU VỒNG)
 local MiniButton = Instance.new("TextButton")
 MiniButton.Name = "MiniButton"
 MiniButton.Parent = ScreenGui
@@ -215,6 +219,7 @@ local MiniStroke = Instance.new("UIStroke")
 MiniStroke.Color = Settings.Theme_Color
 MiniStroke.Thickness = 2
 MiniStroke.Parent = MiniButton
+RegisterRainbow(MiniStroke, "Color")
 
 -- Khung Giao Diện Chính (Main Frame)
 local MainFrame = Instance.new("Frame")
@@ -231,8 +236,9 @@ MainCorner.Parent = MainFrame
 
 local MainStroke = Instance.new("UIStroke")
 MainStroke.Color = Color3.fromRGB(40, 40, 45)
-MainStroke.Thickness = 1
+MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
+RegisterRainbow(MainStroke, "Color")
 
 -- Thanh Tiêu Đề (Title Bar)
 local TitleBar = Instance.new("Frame")
@@ -259,7 +265,7 @@ TitleText.BackgroundTransparency = 1
 TitleText.Position = UDim2.new(0, 15, 0, 0)
 TitleText.Size = UDim2.new(0.7, 0, 1, 0)
 TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "VISUALS & ESP PRO"
+TitleText.Text = "VISUALS & ESP PRO (PC RAINBOW)"
 TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleText.TextSize = 16
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -369,12 +375,11 @@ CreateTab("Settings", "⚙️")
 
 -- Mặc định hiển thị trang ESP đầu tiên
 Pages["ESP"].Visible = true
-TabButtons["ESP"].BackgroundColor3 = Settings.Theme_Color
 TabButtons["ESP"].TextColor3 = Color3.fromRGB(255, 255, 255)
 
 
 -- ================================================================= --
--- 🛠️ CÁC THÀNH PHẦN GUI ĐẶC TRƯNG (TOGGLE, BUTTON, SLIDER)
+-- 🛠️ CÁC THÀNH PHẦN GUI ĐẶC TRƯNG VỚI HỖ TRỢ RGB (TOGGLE, SLIDER)
 -- ================================================================= --
 
 -- 1. Tạo Nút Bật/Tắt (Toggle Switch)
@@ -432,9 +437,16 @@ local function CreateToggle(parentPage, text, settingKey, callback)
         
         if callback then callback(Settings[settingKey]) end
     end)
+    
+    -- Gắn sự kiện đổi màu switch liên tục theo dải màu Rainbow nếu đang được bật
+    RunService.RenderStepped:Connect(function()
+        if Settings[settingKey] then
+            switch.BackgroundColor3 = Settings.Theme_Color
+        end
+    end)
 end
 
--- 2. Tạo Thanh Kéo Neon (Premium Slider) - Hỗ trợ lên đến 500 tốc độ
+-- 2. Tạo Thanh Kéo Tốc độ với viền Rainbow (Slider)
 local function CreateSlider(parentPage, text, min, max, default, callback)
     local sliderFrame = Instance.new("Frame")
     sliderFrame.Parent = parentPage
@@ -466,6 +478,7 @@ local function CreateSlider(parentPage, text, min, max, default, callback)
     valLabel.TextColor3 = Settings.Theme_Color
     valLabel.TextSize = 13
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    RegisterRainbow(valLabel, "TextColor3")
     
     local sliderBar = Instance.new("TextButton")
     sliderBar.Parent = sliderFrame
@@ -482,6 +495,7 @@ local function CreateSlider(parentPage, text, min, max, default, callback)
     sliderFill.Parent = sliderBar
     sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
     sliderFill.BackgroundColor3 = Settings.Theme_Color
+    RegisterRainbow(sliderFill, "BackgroundColor3")
     
     local sfCorner2 = Instance.new("UICorner")
     sfCorner2.CornerRadius = UDim.new(1, 0)
@@ -571,6 +585,7 @@ local function CreateSection(parentPage, text)
     label.Font = Enum.Font.GothamBold
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterRainbow(label, "TextColor3")
 end
 
 
@@ -901,7 +916,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 
--- 2. TÍNH NĂNG BAY (FLY) - PC/MOBILE (Hỗ trợ thay đổi tốc độ)
+-- 2. TÍNH NĂNG BAY (FLY) - PC (Hỗ trợ thay đổi tốc độ)
 local flyConn
 local bodyGyro, bodyVelocity
 
@@ -1035,6 +1050,7 @@ CreateToggle(ToolsPage, "Bật Freecam (Body đứng yên)", "Freecam_Enabled", 
         end
         
         Camera.CameraType = Enum.CameraType.Scriptable
+
         freecamConn = RunService.RenderStepped:Connect(function(dt)
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, -fSpeed) end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, fSpeed) end
@@ -1274,10 +1290,10 @@ end)
 
 
 -- ================================================================= --
--- 🤝 TƯƠNG TÁC NGƯỜI DÙNG (KÉO THẢ MAIN & LOGO COI NHƯ HOÀN HẢO)
+-- 🤝 TƯƠNG TÁC NGƯỜI DÙNG (KÉO THẢ MAIN & LOGO MƯỢT MÀ DI ĐỘNG)
 -- ================================================================= --
 
--- Kéo thả Bảng Điều Khiển Chính
+-- Kéo thả Bảng Điều Khiển Chính bằng chuột
 local dragToggle, dragStart, startPos
 local function updateInput(input)
     local delta = input.Position - dragStart
@@ -1306,7 +1322,7 @@ TitleBar.InputChanged:Connect(function(input)
     end
 end)
 
--- Kéo thả LOGO (MiniButton)
+-- Kéo thả LOGO (MiniButton) bằng chuột cực nhạy
 local miniDragToggle, miniDragStart, miniStartPos
 local function updateMiniInput(input)
     local delta = input.Position - miniDragStart
@@ -1355,13 +1371,43 @@ MiniButton.MouseButton1Click:Connect(function()
 end)
 
 
+-- ================================================================= --
+-- 🌈 VÒNG LẶP LIÊN TỤC CHUYỂN MÀU CẦU VỒNG RGB CHO GIAO DIỆN
+-- ================================================================= --
+RunService.RenderStepped:Connect(function()
+    -- Tính toán màu RGB dựa trên thời gian thực (chu kỳ 6 giây đổi màu 1 vòng)
+    local hue = (tick() % 6) / 6
+    local rainbowColor = Color3.fromHSV(hue, 0.85, 1)
+    Settings.Theme_Color = rainbowColor
+    
+    -- Cập nhật đồng bộ nền của Tab đang mở hoạt động
+    for name, btn in pairs(TabButtons) do
+        if Pages[name].Visible then
+            btn.BackgroundColor3 = rainbowColor
+        end
+    end
+    
+    -- Cập nhật tất cả các viền/chữ có đăng ký RGB hoạt động
+    for i = #RainbowElements, 1, -1 do
+        local item = RainbowElements[i]
+        if item.Instance and item.Instance.Parent then
+            pcall(function()
+                item.Instance[item.Property] = rainbowColor
+            end)
+        else
+            table.remove(RainbowElements, i) -- Tự dọn dẹp nếu đối tượng bị hủy
+        end
+    end
+end)
+
+
 -- Khởi tạo hệ thống ESP ban đầu
 InitializeESP()
 pcall(RefreshPlayerListUI)
 
 -- Gửi thông báo
 game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "Visuals Pro Load!";
+    Title = "Visuals Pro RGB Loaded!";
     Text = "Ấn phím RightShift hoặc nút 👁️ để ẩn/hiện GUI.";
     Duration = 6;
 })
