@@ -9,6 +9,7 @@
       + Nhân vật sẽ bay trực tiếp theo hướng Camera nhìn (Hướng nhìn quyết định hướng bay).
       + Nút điều khiển độ cao (Up/Down) tinh giản, đặt bên phải màn hình tiện lợi.
     - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip, Continuous Y +1.
+    - ĐẶC BIỆT: Sửa triệt để lỗi tự động tắt bay khi nhân vật dịch chuyển hoặc reset/respawn.
     - Thiết kế & Tối ưu hóa Touch bởi Gemini.
 ]]
 
@@ -51,7 +52,7 @@ local Settings = {
     WalkSpeed_Value = 16,
     Fly_Speed = 50,
     
-    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi vòng lặp cầu vồng
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi dải màu cầu vồng
     Auto_Reexecute = true
 }
 
@@ -106,7 +107,7 @@ if not _G.TeleportQueueManager then
                     (syn and syn.queue_on_teleport) or 
                     (fluxus and fluxus.queue_on_teleport) or 
                     (KRNL_LOADED and queue_on_teleport),
-        Scripts = {}, -- Lưu danh sách các script cần chạy lại ở server mới
+        Scripts = {}, -- Danh sách các đoạn mã cần chạy ở server mới
         HasHooked = false,
         IsTeleporting = false
     }
@@ -120,7 +121,7 @@ local function AutoExecuteOnTeleport(scriptString)
         return false
     end
 
-    -- Thêm mã nguồn vào danh sách quản lý tập trung để tránh trùng lặp/mất mát
+    -- Thêm mã nguồn vào danh sách quản lý tập trung để tránh trùng lặp
     table.insert(TeleportManager.Scripts, scriptString)
 
     if not TeleportManager.HasHooked then
@@ -163,7 +164,7 @@ end)
 
 
 -- ================================================================= --
--- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (GUI SETUP)
+-- 🎨 THIẾT GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (GUI SETUP)
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VisualsProGuiMobile"
@@ -992,20 +993,26 @@ CreateSection(ToolsPage, "Hệ Thống Bay & Xuyên Tường")
 local flyConn
 local bodyGyro, bodyVelocity
 
-local function StopFly()
+-- Hàm dọn dẹp các đối tượng lực đẩy vật lý
+local function StopFly(keepSetting)
     if flyConn then flyConn:Disconnect() end
-    if bodyGyro then bodyGyro:Destroy() end
-    if bodyVelocity then bodyVelocity:Destroy() end
+    if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
     
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then hum.PlatformStand = false end
+    
+    -- Nếu không phải reset tạm thời để hồi sinh, ta mới chuyển trạng thái menu về tắt hẳn
+    if not keepSetting then
+        Settings.Fly_Enabled = false
+    end
     UpdateDPadVisibility()
 end
 
--- Khởi động hệ thống Bay theo hướng nhìn của Camera kết hợp Joystick ảo
+-- Khởi động hệ thống Bay mượt theo hướng nhìn của Camera kết hợp Joystick ảo
 local function StartFly()
-    StopFly()
+    StopFly(true) -- Xóa bỏ các lực cũ một cách an toàn nhưng giữ nguyên trạng thái bật trên menu
     
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -1028,23 +1035,55 @@ local function StartFly()
     UpdateDPadVisibility()
 
     flyConn = RunService.RenderStepped:Connect(function()
-        if not Settings.Fly_Enabled or not hrp or not hum or hum.Health <= 0 then
-            Settings.Fly_Enabled = false
-            StopFly()
+        -- Kiểm tra nếu người dùng chủ động tắt trên menu
+        if not Settings.Fly_Enabled then
+            StopFly(false)
             return
+        end
+
+        local currentChar = LocalPlayer.Character
+        local currentHrp = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+        local currentHum = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
+
+        -- Nếu nhân vật bị reset hoặc đang teleport (tạm thời không khả dụng cơ thể)
+        if not currentHrp or not currentHum or currentHum.Health <= 0 then
+            -- Tạm thời dọn dẹp lực vật lý của nhân vật cũ nhưng không tắt cài đặt Toggle
+            if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+            if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+            return
+        end
+
+        -- Tự động tạo lại và gán lực đẩy nếu nhân vật đã hồi sinh hoặc teleport xong
+        if not bodyGyro or bodyGyro.Parent ~= currentHrp then
+            if bodyGyro then pcall(function() bodyGyro:Destroy() end) end
+            bodyGyro = Instance.new("BodyGyro")
+            bodyGyro.P = 9e4
+            bodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            bodyGyro.cframe = currentHrp.CFrame
+            bodyGyro.Parent = currentHrp
+        end
+
+        if not bodyVelocity or bodyVelocity.Parent ~= currentHrp then
+            if bodyVelocity then pcall(function() bodyVelocity:Destroy() end) end
+            bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+            bodyVelocity.velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Parent = currentHrp
+        end
+
+        if not currentHum.PlatformStand then
+            currentHum.PlatformStand = true
         end
 
         bodyGyro.cframe = Camera.CFrame
 
-        -- Nhận hướng di chuyển trực tiếp từ Joystick ảo của Roblox
+        -- Nhận hướng di chuyển trực tiếp từ Joystick mặc định của Roblox
         local joyInput = GetJoystickInput()
         local moveDir = Vector3.new(0, 0, 0)
         
         if joyInput.Magnitude > 0 then
             local lookVector = Camera.CFrame.LookVector
             local rightVector = Camera.CFrame.RightVector
-            
-            -- joyInput.Z âm là đi thẳng về phía trước, joyInput.X là trái/phải
             moveDir = (lookVector * -joyInput.Z) + (rightVector * joyInput.X)
         end
 
@@ -1068,12 +1107,22 @@ CreateToggle(ToolsPage, "Bật Bay (Dùng Joystick + Hướng Cam)", "Fly_Enable
     if state then
         StartFly()
     else
-        StopFly()
+        StopFly(false)
     end
 end)
 
 CreateSlider(ToolsPage, "Tốc độ bay (FlySpeed)", 10, 500, Settings.Fly_Speed, function(value)
     Settings.Fly_Speed = value
+end)
+
+-- Lắng nghe sự kiện CharacterAdded của Roblox để tự hồi phục trạng thái bay sau khi reset nhân vật
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    local hum = char:WaitForChild("Humanoid", 5)
+    task.wait(0.5) -- Đợi các bộ phận tải mượt mà
+    if Settings.Fly_Enabled then
+        StartFly()
+    end
 end)
 
 -- Noclip xuyên tường
@@ -1186,7 +1235,6 @@ SpecCorner.Parent = SpectateFrame
 
 local SpecInput = Instance.new("TextBox")
 SpecInput.Parent = SpectateFrame
-SpecInput.Size = UDim2.new(0, 10, 0, 0) -- Giấu khung input hoặc co nhỏ mượt mà
 SpecInput.BackgroundTransparency = 1
 SpecInput.TextColor3 = Color3.new(1, 1, 1)
 SpecInput.PlaceholderText = "Tìm tên..."
@@ -1352,7 +1400,7 @@ end)
 -- --- TAB 4: SETTINGS ---
 CreateSection(SettingsPage, "Hệ Thống Tránh Mất Script")
 CreateToggle(SettingsPage, "FixLost: Tự động chạy lại", "Auto_Reexecute", function(state)
-    -- Ghi nhận thay đổi trạng thái
+    -- Lắng nghe thay đổi trạng thái
 end)
 
 CreateSection(SettingsPage, "Server Options")
@@ -1459,7 +1507,6 @@ end)
 -- 🌈 VÒNG LẶP LIÊN TỤC CHUYỂN MÀU CẦU VỒNG RGB CHO GIAO DIỆN
 -- ================================================================= --
 RunService.RenderStepped:Connect(function()
-    -- Tính toán màu RGB dựa trên thời gian thực (chu kỳ 6 giây đổi màu 1 vòng)
     local hue = (tick() % 6) / 6
     local rainbowColor = Color3.fromHSV(hue, 0.85, 1)
     Settings.Theme_Color = rainbowColor
