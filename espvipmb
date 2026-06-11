@@ -1,14 +1,14 @@
 --[[
     ===================================================================
-    📱 VISUALS & ESP PRO - MOBILE EXCLUSIVE EDITION (WITH JOYSTICK & RGB) 📱
+    📱 VISUALS & ESP PRO - MOBILE PREMIUM RAINBOW EDITION (FIXLOST) 📱
     ===================================================================
     - Giao diện: Tối ưu kích thước cảm ứng điện thoại, hỗ trợ CHUYỂN MÀU CẦU VỒNG (RGB).
-    - Kéo thả: Hỗ trợ vuốt chạm kéo thả bảng điều khiển và nút LOGO cực nhạy.
+    - Kéo thả: Hỗ trợ vuốt chạm kéo thả bảng điều khiển và nút LOGO cực nhạy trên điện thoại.
     - Hệ thống di chuyển di động cải tiến:
       + Tự động nhận diện JOYSTICK mặc định của Roblox để di chuyển FLY và FREECAM.
       + Nhân vật sẽ bay trực tiếp theo hướng Camera nhìn (Hướng nhìn quyết định hướng bay).
       + Nút điều khiển độ cao (Up/Down) tinh giản, đặt bên phải màn hình tiện lợi.
-    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip, Continuous Y +1.
     - Thiết kế & Tối ưu hóa Touch bởi Gemini.
 ]]
 
@@ -45,12 +45,13 @@ local Settings = {
     Freecam_Enabled = false,
     Fly_Enabled = false,
     Noclip_Enabled = false,
+    ContinuousY_Enabled = false, -- Trạng thái bay lên liên tục Y +1
     
     WalkSpeed_Enabled = false,
     WalkSpeed_Value = 16,
     Fly_Speed = 50,
     
-    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè bởi vòng lặp cầu vồng RGB
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi vòng lặp cầu vồng
     Auto_Reexecute = true
 }
 
@@ -97,29 +98,68 @@ end
 
 
 -- ================================================================= --
--- 🔄 CƠ CHẾ FIXLOST (AUTO-REEXECUTE ON TELEPORT)
+-- 🔄 CƠ CHẾ FIXLOST TẬP TRUNG (DÙNG CHO CHUYỂN SERVER / REJOIN)
 -- ================================================================= --
-local function HookTeleportFixLost()
-    if not Settings.Auto_Reexecute then return end
-    
-    local queue_func = queue_on_teleport or 
-                       (syn and syn.queue_on_teleport) or 
-                       (fluxus and fluxus.queue_on_teleport) or 
-                       (KRNL_LOADED and queue_on_teleport)
-
-    if queue_func then
-        local currentLoadstring = _G.CustomScriptLoadstring or [[
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
-        ]]
-        LocalPlayer.OnTeleport:Connect(function(state)
-            queue_func(currentLoadstring)
-        end)
-    else
-        warn("[FixLost]: Executor không hỗ trợ queue_on_teleport!")
-    end
+if not _G.TeleportQueueManager then
+    _G.TeleportQueueManager = {
+        QueueFunc = queue_on_teleport or 
+                    (syn and syn.queue_on_teleport) or 
+                    (fluxus and fluxus.queue_on_teleport) or 
+                    (KRNL_LOADED and queue_on_teleport),
+        Scripts = {}, -- Lưu danh sách các script cần chạy lại ở server mới
+        HasHooked = false,
+        IsTeleporting = false
+    }
 end
 
-task.spawn(HookTeleportFixLost)
+local TeleportManager = _G.TeleportQueueManager
+
+local function AutoExecuteOnTeleport(scriptString)
+    if not TeleportManager.QueueFunc then
+        warn("[TeleportManager]: Executor của bạn không hỗ trợ queue_on_teleport!")
+        return false
+    end
+
+    -- Thêm mã nguồn vào danh sách quản lý tập trung để tránh trùng lặp/mất mát
+    table.insert(TeleportManager.Scripts, scriptString)
+
+    if not TeleportManager.HasHooked then
+        TeleportManager.HasHooked = true
+
+        LocalPlayer.OnTeleport:Connect(function(teleportState)
+            if TeleportManager.IsTeleporting then return end
+            TeleportManager.IsTeleporting = true
+
+            local CombinedScript = ""
+            for i, code in ipairs(TeleportManager.Scripts) do
+                -- Bọc mã nguồn trong task.spawn và pcall để đảm bảo chạy mượt và không lỗi
+                CombinedScript = CombinedScript .. string.format([[
+                    task.spawn(function()
+                        local success, err = pcall(function()
+                            %s
+                        end)
+                        if not success then
+                            warn("Lỗi khi load lại script phần %d:", err)
+                        end
+                    end)
+                ]], code, i)
+            end
+
+            TeleportManager.QueueFunc(CombinedScript)
+        end)
+    end
+    return true
+end
+
+-- Đăng ký script hiện tại vào hệ thống tự lưu FixLost
+local currentScriptCode = _G.CustomScriptLoadstring or [[
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() -- Dự phòng nạp lại
+]]
+task.spawn(function()
+    if Settings.Auto_Reexecute then
+        AutoExecuteOnTeleport(currentScriptCode)
+    end
+end)
 
 
 -- ================================================================= --
@@ -395,7 +435,6 @@ TabButtons["ESP"].TextColor3 = Color3.fromRGB(255, 255, 255)
 -- ================================================================= --
 -- 📱 NÚT NÂNG HẠ ĐỘ CAO DI ĐỘNG (UP & DOWN CONTROLS)
 -- ================================================================= --
--- Chỉ chứa nút Lên/Xuống để người dùng điều khiển độ cao bên tay phải
 local DPadFrame = Instance.new("Frame")
 DPadFrame.Name = "DPadFrame"
 DPadFrame.Parent = ScreenGui
@@ -444,7 +483,6 @@ local function CreateDPadButton(name, text, pos)
     return btn
 end
 
--- Tạo nút lên/xuống ở góc phải màn hình
 CreateDPadButton("Up", "▲+", UDim2.new(0.5, -25, 0, 10))
 CreateDPadButton("Down", "▼-", UDim2.new(0.5, -25, 1, -60))
 
@@ -549,6 +587,7 @@ local function CreateSlider(parentPage, text, min, max, default, callback)
     valLabel.TextColor3 = Settings.Theme_Color
     valLabel.TextSize = 12
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    RegisterRainbow(valLabel, "TextColor3")
     
     local sliderBar = Instance.new("TextButton")
     sliderBar.Parent = sliderFrame
@@ -1060,6 +1099,28 @@ CreateToggle(ToolsPage, "Bật đi xuyên tường (Noclip)", "Noclip_Enabled", 
     end
 end)
 
+-- Bay lên liên tục (Y +1) cho Mobile
+local continuousYConn
+CreateToggle(ToolsPage, "Bay lên liên tục (Y +1)", "ContinuousY_Enabled", function(state)
+    if state then
+        continuousYConn = RunService.Heartbeat:Connect(function()
+            if not Settings.ContinuousY_Enabled then
+                if continuousYConn then continuousYConn:Disconnect() end
+                return
+            end
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                hrp.CFrame = hrp.CFrame + Vector3.new(0, 1, 0)
+                hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+            end
+        end)
+    else
+        if continuousYConn then continuousYConn:Disconnect() end
+    end
+end)
+
 
 CreateSection(ToolsPage, "Camera & Thám Thính")
 
@@ -1125,8 +1186,7 @@ SpecCorner.Parent = SpectateFrame
 
 local SpecInput = Instance.new("TextBox")
 SpecInput.Parent = SpectateFrame
-SpecInput.Size = UDim2.new(0.5, -10, 1, 0)
-SpecInput.Position = UDim2.new(0, 10, 0, 0)
+SpecInput.Size = UDim2.new(0, 10, 0, 0) -- Giấu khung input hoặc co nhỏ mượt mà
 SpecInput.BackgroundTransparency = 1
 SpecInput.TextColor3 = Color3.new(1, 1, 1)
 SpecInput.PlaceholderText = "Tìm tên..."
@@ -1135,6 +1195,7 @@ SpecInput.Font = Enum.Font.GothamMedium
 SpecInput.Text = ""
 SpecInput.TextSize = 11
 SpecInput.TextXAlignment = Enum.TextXAlignment.Left
+SpecInput.Size = UDim2.new(0.5, -10, 1, 0)
 
 local SpecBtn = Instance.new("TextButton")
 SpecBtn.Parent = SpectateFrame
@@ -1291,7 +1352,7 @@ end)
 -- --- TAB 4: SETTINGS ---
 CreateSection(SettingsPage, "Hệ Thống Tránh Mất Script")
 CreateToggle(SettingsPage, "FixLost: Tự động chạy lại", "Auto_Reexecute", function(state)
-    if state then HookTeleportFixLost() end
+    -- Ghi nhận thay đổi trạng thái
 end)
 
 CreateSection(SettingsPage, "Server Options")
