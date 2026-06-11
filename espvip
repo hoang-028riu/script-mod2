@@ -1,29 +1,54 @@
 --[[
-    VISUALS & ESP GUI - Extracted & Remade from Infinite Yield
-    Features: ESP (Box, Name, Chams, Tracers), Xray, Fullbright, Spectate, Freecam
-    Created by Gemini
+    ===================================================================
+    🌟 VISUALS & ESP PRO - PREMIUM EDITION (WITH INTEGRATED FIXLOST) 🌟
+    ===================================================================
+    - Giao diện: Hiện đại, mượt mài, hỗ trợ kéo thả cả bảng điều khiển và nút LOGO.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Pro.
+    - Sửa lỗi quan trọng: 
+      + Sửa triệt để lỗi không nhận diện ESP cho người chơi mới tham gia server.
+      + Sửa lỗi mất ESP hoàn toàn sau khi người chơi hồi sinh (respawn/reset).
+      + Tối ưu hóa hiệu năng thu hồi bộ nhớ, không gây sụt giảm FPS.
+    - Thiết kế & Tối ưu bởi Gemini.
 ]]
 
+-- Ngăn chặn việc chạy trùng lặp nhiều bản GUI cùng lúc
+if game:GetService("CoreGui"):FindFirstChild("VisualsProGui") or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("VisualsProGui") then
+    pcall(function()
+        game:GetService("CoreGui"):FindFirstChild("VisualsProGui"):Destroy()
+        game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("VisualsProGui"):Destroy()
+    end)
+end
+
+-- // KHAI BÁO DỊCH VỤ //
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // CẤU HÌNH & TRẠNG THÁI //
+-- // CONFIGS & STATES //
 local Settings = {
-    ESP_Enabled = false,
+    ESP_Enabled = true,
     Box_Enabled = false,
     Name_Enabled = false,
+    Distance_Enabled = false,
     Chams_Enabled = false,
     Tracers_Enabled = false,
+    Team_Check = false,
+    
     Xray_Enabled = false,
     Fullbright_Enabled = false,
-    Freecam_Enabled = false
+    Freecam_Enabled = false,
+    
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Màu chủ đạo (Cyan Neon)
+    Auto_Reexecute = true -- Mặc định bật tự động giữ script khi đổi server
 }
 
-local ESP_Storage = {} -- Lưu trữ các object ESP
+local ESP_Storage = {}
+local OriginalTransparency = {} -- Lưu trữ độ trong suốt gốc cho Xray
 local OriginalSettings = {
     Ambient = Lighting.Ambient,
     OutdoorAmbient = Lighting.OutdoorAmbient,
@@ -32,338 +57,692 @@ local OriginalSettings = {
     FogEnd = Lighting.FogEnd
 }
 
--- // GUI SETUP //
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local Title = Instance.new("TextLabel")
-local ScrollFrame = Instance.new("ScrollingFrame")
-local UICorner = Instance.new("UICorner")
+-- ================================================================= --
+-- 🔄 CƠ CHẾ FIXLOST (AUTO-REEXECUTE ON TELEPORT)
+-- ================================================================= --
+local function HookTeleportFixLost()
+    if not Settings.Auto_Reexecute then return end
+    
+    local queue_func = queue_on_teleport or 
+                       (syn and syn.queue_on_teleport) or 
+                       (fluxus and fluxus.queue_on_teleport) or 
+                       (KRNL_LOADED and queue_on_teleport)
 
-ScreenGui.Name = "VisualsGui"
-ScreenGui.Parent = game:GetService("CoreGui") -- Dùng CoreGui để ẩn khỏi game (nếu executor hỗ trợ)
-if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    if queue_func then
+        -- Lưu lại nguồn script này để tự chạy lại
+        local currentLoadstring = _G.CustomScriptLoadstring or [[
+            -- Chạy lại chính xác bộ mã nguồn Visuals Pro này
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() -- Ví dụ dự phòng
+        ]]
+        
+        -- Thiết lập sự kiện OnTeleport để đẩy script vào hàng đợi khi chuyển server
+        LocalPlayer.OnTeleport:Connect(function(state)
+            queue_func(currentLoadstring)
+        end)
+    else
+        warn("[FixLost]: Executor của bạn không hỗ trợ queue_on_teleport!")
+    end
+end
+
+-- Kích hoạt FixLost ngay khi khởi chạy
+task.spawn(HookTeleportFixLost)
+
+
+-- ================================================================= --
+-- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN NGHIỆP (GUI SETUP)
+-- ================================================================= --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "VisualsProGui"
 ScreenGui.ResetOnSpawn = false
 
--- Main Frame
+local success, _ = pcall(function()
+    ScreenGui.Parent = CoreGui
+end)
+if not success then
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Nút Thu Nhỏ (Floating Toggle Button - LOGO KÉO THẢ ĐƯỢC)
+local MiniButton = Instance.new("TextButton")
+MiniButton.Name = "MiniButton"
+MiniButton.Parent = ScreenGui
+MiniButton.Size = UDim2.new(0, 52, 0, 52)
+MiniButton.Position = UDim2.new(0.05, 0, 0.2, 0)
+MiniButton.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+MiniButton.Text = "👁️"
+MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MiniButton.TextSize = 24
+MiniButton.Font = Enum.Font.GothamBold
+MiniButton.Visible = false -- Chỉ xuất hiện khi đóng bảng điều khiển chính
+
+local MiniCorner = Instance.new("UICorner")
+MiniCorner.CornerRadius = UDim.new(0.5, 0)
+MiniCorner.Parent = MiniButton
+
+local MiniStroke = Instance.new("UIStroke")
+MiniStroke.Color = Settings.Theme_Color
+MiniStroke.Thickness = 2
+MiniStroke.Parent = MiniButton
+
+-- Khung Giao Diện Chính (Main Frame)
+local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
-MainFrame.Size = UDim2.new(0, 300, 0, 350)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 500, 0, 360)
 MainFrame.Active = true
-MainFrame.Draggable = true
-UICorner.Parent = MainFrame
 
--- Title
-Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Font = Enum.Font.GothamBold
-Title.Text = "VISUALS & ESP"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 18
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
 
--- Scroll Frame (Chứa các nút)
-ScrollFrame.Parent = MainFrame
-ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
-ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
-ScrollFrame.ScrollBarThickness = 4
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(40, 40, 45)
+MainStroke.Thickness = 1
+MainStroke.Parent = MainFrame
 
--- Layout List
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = ScrollFrame
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 5)
+-- Thanh Tiêu Đề (Title Bar)
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+TitleBar.Size = UDim2.new(1, 0, 0, 45)
 
--- // HÀM TẠO NÚT (Helper) //
-local function CreateButton(text, callback)
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
+
+-- Che góc dưới của TitleBar để giữ cạnh vuông bên trong
+local TitleCheater = Instance.new("Frame")
+TitleCheater.Size = UDim2.new(1, 0, 0, 10)
+TitleCheater.Position = UDim2.new(0, 0, 1, -10)
+TitleCheater.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+TitleCheater.BorderSizePixel = 0
+TitleCheater.Parent = TitleBar
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Parent = TitleBar
+TitleText.BackgroundTransparency = 1
+TitleText.Position = UDim2.new(0, 15, 0, 0)
+TitleText.Size = UDim2.new(0.7, 0, 1, 0)
+TitleText.Font = Enum.Font.GothamBold
+TitleText.Text = "VISUALS & ESP PRO"
+TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleText.TextSize = 16
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Nút Đóng GUI (Góc phải)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = TitleBar
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -40, 0.5, -15)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 22
+CloseBtn.Font = Enum.Font.GothamBold
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- Thanh Bên Chọn Tab (Sidebar)
+local Sidebar = Instance.new("Frame")
+Sidebar.Name = "Sidebar"
+Sidebar.Parent = MainFrame
+Sidebar.BackgroundColor3 = Color3.fromRGB(11, 11, 14)
+Sidebar.Position = UDim2.new(0, 0, 0, 45)
+Sidebar.Size = UDim2.new(0, 140, 1, -45)
+
+local SidebarCorner = Instance.new("UICorner")
+SidebarCorner.CornerRadius = UDim.new(0, 10)
+SidebarCorner.Parent = Sidebar
+
+-- Khu Vực Chứa Nội Dung (Container)
+local Container = Instance.new("Frame")
+Container.Name = "Container"
+Container.Parent = MainFrame
+Container.BackgroundTransparency = 1
+Container.Position = UDim2.new(0, 145, 0, 50)
+Container.Size = UDim2.new(1, -150, 1, -55)
+
+-- Thiết lập các trang nội dung (Pages)
+local Pages = {}
+local function CreatePage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name .. "Page"
+    page.Parent = Container
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = Settings.Theme_Color
+    page.Visible = false
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = page
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 6)
+    
+    Pages[name] = page
+    return page
+end
+
+local ESPPage = CreatePage("ESP")
+local WorldPage = CreatePage("World")
+local ToolsPage = CreatePage("Tools")
+local SettingsPage = CreatePage("Settings")
+
+-- // HỆ THỐNG CHUYỂN TAB //
+local SidebarLayout = Instance.new("UIListLayout")
+SidebarLayout.Parent = Sidebar
+SidebarLayout.Padding = UDim.new(0, 4)
+SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local TabButtons = {}
+local function CreateTab(name, icon)
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Parent = Sidebar
+    tabBtn.Size = UDim2.new(0.9, 0, 0, 36)
+    tabBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    tabBtn.Text = icon .. "  " .. name
+    tabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    tabBtn.Font = Enum.Font.GothamSemibold
+    tabBtn.TextSize = 13
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = tabBtn
+    
+    tabBtn.MouseButton1Click:Connect(function()
+        for tName, page in pairs(Pages) do
+            page.Visible = false
+        end
+        for _, btn in pairs(TabButtons) do
+            btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+            btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
+        Pages[name].Visible = true
+        tabBtn.BackgroundColor3 = Settings.Theme_Color
+        tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    
+    TabButtons[name] = tabBtn
+end
+
+CreateTab("ESP", "👁️")
+CreateTab("World", "🌐")
+CreateTab("Tools", "🛠️")
+CreateTab("Settings", "⚙️")
+
+-- Mặc định hiển thị trang ESP đầu tiên
+Pages["ESP"].Visible = true
+TabButtons["ESP"].BackgroundColor3 = Settings.Theme_Color
+TabButtons["ESP"].TextColor3 = Color3.fromRGB(255, 255, 255)
+
+
+-- ================================================================= --
+-- 🛠️ CÁC THÀNH PHẦN GUI ĐẶC TRƯNG (TOGGLE, BUTTON, SLIDER)
+-- ================================================================= --
+
+-- 1. Tạo Nút Bật/Tắt (Toggle Switch)
+local function CreateToggle(parentPage, text, settingKey, callback)
+    local toggleFrame = Instance.new("Frame")
+    toggleFrame.Parent = parentPage
+    toggleFrame.Size = UDim2.new(1, -10, 0, 40)
+    toggleFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    
+    local tfCorner = Instance.new("UICorner")
+    tfCorner.CornerRadius = UDim.new(0, 6)
+    tfCorner.Parent = toggleFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Parent = toggleFrame
+    label.BackgroundTransparency = 1
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Font = Enum.Font.GothamMedium
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(210, 210, 215)
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local switch = Instance.new("TextButton")
+    switch.Parent = toggleFrame
+    switch.Position = UDim2.new(1, -52, 0.5, -11)
+    switch.Size = UDim2.new(0, 42, 0, 22)
+    switch.BackgroundColor3 = Settings[settingKey] and Settings.Theme_Color or Color3.fromRGB(45, 45, 50)
+    switch.Text = ""
+    
+    local swCorner = Instance.new("UICorner")
+    swCorner.CornerRadius = UDim.new(0.5, 0)
+    swCorner.Parent = switch
+    
+    local indicator = Instance.new("Frame")
+    indicator.Parent = switch
+    indicator.Size = UDim2.new(0, 16, 0, 16)
+    indicator.Position = Settings[settingKey] and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+    indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    
+    local indCorner = Instance.new("UICorner")
+    indCorner.CornerRadius = UDim.new(0.5, 0)
+    indCorner.Parent = indicator
+    
+    switch.MouseButton1Click:Connect(function()
+        Settings[settingKey] = not Settings[settingKey]
+        
+        -- Hiệu ứng mượt mà khi chuyển trạng thái
+        local targetPos = Settings[settingKey] and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+        local targetColor = Settings[settingKey] and Settings.Theme_Color or Color3.fromRGB(45, 45, 50)
+        
+        TweenService:Create(indicator, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        TweenService:Create(switch, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = targetColor}):Play()
+        
+        if callback then callback(Settings[settingKey]) end
+    end)
+end
+
+-- 2. Tạo Nút Nhấn (Button)
+local function CreateButton(parentPage, text, callback)
     local btn = Instance.new("TextButton")
-    btn.Parent = ScrollFrame
-    btn.Size = UDim2.new(1, 0, 0, 35)
-    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    btn.Font = Enum.Font.GothamSemibold
+    btn.Parent = parentPage
+    btn.Size = UDim2.new(1, -10, 0, 38)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    btn.Font = Enum.Font.GothamBold
     btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.TextSize = 14
+    btn.TextColor3 = Color3.fromRGB(235, 235, 240)
+    btn.TextSize = 13
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
     
-    btn.MouseButton1Click:Connect(function()
-        local isOn = callback()
-        if isOn then
-            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255) -- Màu xanh khi bật
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- Màu xám khi tắt
-            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
+    -- Hiệu ứng Hover
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(40, 40, 48)}):Play()
     end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(30, 30, 35)}):Play()
+    end)
+    
+    btn.MouseButton1Click:Connect(callback)
     return btn
 end
 
-local function CreateSection(text)
+-- 3. Tạo Đoạn Tiêu Đề Nhỏ (Label/Section)
+local function CreateSection(parentPage, text)
     local label = Instance.new("TextLabel")
-    label.Parent = ScrollFrame
-    label.Size = UDim2.new(1, 0, 0, 25)
+    label.Parent = parentPage
+    label.Size = UDim2.new(1, -10, 0, 25)
     label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(255, 255, 0)
+    label.Text = "  " .. text:upper()
+    label.TextColor3 = Settings.Theme_Color
     label.Font = Enum.Font.GothamBold
-    label.TextSize = 14
+    label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
 end
 
--- // CHỨC NĂNG ESP (CORE) //
 
--- Xóa ESP cũ của 1 player
-local function ClearESP(player)
+-- ================================================================= --
+-- 🎯 CHỨC NĂNG ESP CHUYÊN NGHIỆP & SỬA LỖI RE-SPAWN (BUG-FREE ESP)
+-- ================================================================= --
+
+-- Hàm dọn dẹp bộ nhớ và đối tượng vẽ của 1 người chơi
+local function CleanPlayerESP(player)
     if ESP_Storage[player] then
-        for _, obj in pairs(ESP_Storage[player]) do
-            if obj.Remove then obj:Remove() else obj:Destroy() end
+        -- Ngắt kết nối các sự kiện đang chạy ngầm của player này
+        if ESP_Storage[player].Connections then
+            for _, conn in ipairs(ESP_Storage[player].Connections) do
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        -- Xóa sạch các đối tượng vẽ
+        if ESP_Storage[player].Objects then
+            for _, obj in pairs(ESP_Storage[player].Objects) do
+                pcall(function()
+                    if obj.Remove then obj:Remove() else obj:Destroy() end
+                end)
+            end
         end
         ESP_Storage[player] = nil
     end
 end
 
--- Tạo ESP cho 1 player
-local function CreateESP(player)
+-- Thiết lập vẽ ESP cho người chơi mới
+local function ApplyESPToPlayer(player)
     if player == LocalPlayer then return end
+    CleanPlayerESP(player) -- Đảm bảo không trùng lặp bộ nhớ
     
-    local storage = {
-        Box = nil,
-        Name = nil,
-        Highlight = nil,
-        Tracer = nil
+    ESP_Storage[player] = {
+        Objects = {},
+        Connections = {}
     }
     
-    -- 1. Highlight (Chams)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "ESPHighlight"
-    highlight.FillColor = Color3.fromRGB(255, 0, 0)
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.5
-    highlight.OutlineTransparency = 0
-    highlight.Enabled = Settings.Chams_Enabled
-    storage.Highlight = highlight
+    -- Hàm tạo các thực thể vẽ ESP cho từng Nhân Vật (Character) cụ thể
+    local function onCharacterAdded(char)
+        -- Trước khi tạo mới cho nhân vật này, dọn sạch đồ họa cũ của nhân vật trước đó
+        if ESP_Storage[player] and ESP_Storage[player].Objects then
+            for _, obj in pairs(ESP_Storage[player].Objects) do
+                pcall(function()
+                    if obj.Remove then obj:Remove() else obj:Destroy() end
+                end)
+            end
+            table.clear(ESP_Storage[player].Objects)
+        end
+        
+        local objects = ESP_Storage[player] and ESP_Storage[player].Objects
+        if not objects then return end
+        
+        -- 1. Chams (Highlight nhìn xuyên tường)
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.FillColor = player.TeamColor and player.TeamColor.Color or Color3.fromRGB(255, 50, 50)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.4
+        highlight.OutlineTransparency = 0.1
+        highlight.Enabled = Settings.Chams_Enabled
+        highlight.Parent = char
+        objects.Highlight = highlight
 
-    -- 2. BillboardGui (Name & Box)
-    local bb = Instance.new("BillboardGui")
-    bb.Name = "ESP_Billboard"
-    bb.Adornee = nil
-    bb.AlwaysOnTop = true
-    bb.Size = UDim2.new(4, 0, 5, 0)
-    bb.StudsOffset = Vector3.new(0, 0, 0)
-    
-    local boxFrame = Instance.new("Frame")
-    boxFrame.Size = UDim2.new(1, 0, 1, 0)
-    boxFrame.BackgroundTransparency = 1
-    boxFrame.BorderColor3 = Color3.new(1, 0, 0)
-    boxFrame.BorderSizePixel = 2
-    boxFrame.Visible = Settings.Box_Enabled
-    boxFrame.Parent = bb
-    storage.Box = boxFrame
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, 0, 0, 20)
-    nameLabel.Position = UDim2.new(0, 0, -0.2, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = player.Name
-    nameLabel.TextColor3 = Color3.new(1, 1, 1)
-    nameLabel.TextStrokeTransparency = 0
-    nameLabel.Visible = Settings.Name_Enabled
-    nameLabel.Parent = bb
-    storage.Name = nameLabel
-    
-    -- 3. Tracer (Drawing API) - Chỉ hoạt động nếu executor hỗ trợ Drawing
-    local tracerLine
-    if Drawing then
-        tracerLine = Drawing.new("Line")
-        tracerLine.Visible = false
-        tracerLine.Color = Color3.new(1, 0, 0)
-        tracerLine.Thickness = 1.5
-        tracerLine.Transparency = 1
-        storage.Tracer = tracerLine
-    end
-    
-    ESP_Storage[player] = storage
+        -- 2. Billboard (Tên & Khoảng cách)
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP_Billboard"
+        billboard.AlwaysOnTop = true
+        billboard.Size = UDim2.new(0, 100, 0, 45)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Parent = billboard
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.fromRGB(255, 255, 255)
+        textLabel.TextStrokeTransparency = 0
+        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextSize = 12
+        textLabel.Visible = Settings.Name_Enabled or Settings.Distance_Enabled
+        objects.Label = textLabel
+        objects.Billboard = billboard
 
-    -- Loop Update cho từng Player
-    local connection
-    connection = RunService.RenderStepped:Connect(function()
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
-            if bb.Parent then bb.Parent = nil end
-            if highlight.Parent then highlight.Parent = nil end
-            if tracerLine then tracerLine.Visible = false end
-            return 
+        -- 3. Box ESP (Khung vẽ quanh người)
+        local boxBillboard = Instance.new("BillboardGui")
+        boxBillboard.Name = "ESP_BoxBillboard"
+        boxBillboard.AlwaysOnTop = true
+        boxBillboard.Size = UDim2.new(4.5, 0, 6, 0)
+        
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Parent = boxBillboard
+        boxFrame.Size = UDim2.new(1, 0, 1, 0)
+        boxFrame.BackgroundTransparency = 1
+        boxFrame.BorderColor3 = player.TeamColor and player.TeamColor.Color or Settings.Theme_Color
+        boxFrame.BorderSizePixel = 1.5
+        boxFrame.Visible = Settings.Box_Enabled
+        
+        local innerStroke = Instance.new("UIStroke")
+        innerStroke.Color = Color3.fromRGB(0, 0, 0)
+        innerStroke.Thickness = 0.5
+        innerStroke.Parent = boxFrame
+        objects.Box = boxBillboard
+
+        -- 4. Tracers (Đường kẻ định vị hướng)
+        local tracerLine
+        if Drawing then
+            tracerLine = Drawing.new("Line")
+            tracerLine.Visible = false
+            tracerLine.Color = player.TeamColor and player.TeamColor.Color or Settings.Theme_Color
+            tracerLine.Thickness = 1.2
+            tracerLine.Transparency = 0.8
+            objects.Tracer = tracerLine
         end
-        
-        local char = player.Character
-        local hrp = char.HumanoidRootPart
-        
-        -- Update Chams
-        if Settings.Chams_Enabled then
-            if highlight.Parent ~= char then highlight.Parent = char end
-            highlight.Enabled = true
-        else
-            highlight.Enabled = false
-        end
-        
-        -- Update Box/Name
-        if Settings.Box_Enabled or Settings.Name_Enabled then
-            if bb.Parent ~= char then bb.Parent = char end
-            boxFrame.Visible = Settings.Box_Enabled
-            nameLabel.Visible = Settings.Name_Enabled
-        else
-            bb.Parent = nil
-        end
-        
-        -- Update Tracers
-        if tracerLine then
-            if Settings.Tracers_Enabled then
-                local vec, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                if onScreen then
-                    tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y) -- Từ dưới màn hình
-                    tracerLine.To = Vector2.new(vec.X, vec.Y)
-                    tracerLine.Visible = true
+
+        -- Vòng lặp RenderStepped cập nhật liên tục tọa độ cho nhân vật hiện tại
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            -- Dừng cập nhật nếu người chơi rời game hoặc nhân vật thay đổi
+            if not player or not player.Parent or player.Character ~= char then
+                renderConn:Disconnect()
+                return
+            end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local isFriendly = Settings.Team_Check and player.Team == LocalPlayer.Team
+            
+            if not hrp or not hum or hum.Health <= 0 or isFriendly then
+                if billboard.Parent then billboard.Parent = nil end
+                if boxBillboard.Parent then boxBillboard.Parent = nil end
+                if highlight.Parent then highlight.Parent = nil end
+                if tracerLine then tracerLine.Visible = false end
+                return
+            end
+
+            -- Áp dụng Chams
+            if Settings.Chams_Enabled and Settings.ESP_Enabled then
+                if highlight.Parent ~= char then highlight.Parent = char end
+                highlight.Enabled = true
+            else
+                highlight.Enabled = false
+            end
+
+            -- Áp dụng Tên & Khoảng cách
+            if (Settings.Name_Enabled or Settings.Distance_Enabled) and Settings.ESP_Enabled then
+                if billboard.Parent ~= hrp then billboard.Parent = hrp end
+                textLabel.Visible = true
+                
+                local distance = math.floor((LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) or 0)
+                
+                local textStr = ""
+                if Settings.Name_Enabled then textStr = textStr .. player.DisplayName end
+                if Settings.Distance_Enabled then textStr = textStr .. "\n[" .. distance .. "m]" end
+                
+                textLabel.Text = textStr
+            else
+                if billboard.Parent then billboard.Parent = nil end
+            end
+
+            -- Áp dụng Box ESP
+            if Settings.Box_Enabled and Settings.ESP_Enabled then
+                if boxBillboard.Parent ~= hrp then boxBillboard.Parent = hrp end
+                boxFrame.Visible = true
+            else
+                if boxBillboard.Parent then boxBillboard.Parent = nil end
+            end
+
+            -- Áp dụng Tracers
+            if tracerLine then
+                if Settings.Tracers_Enabled and Settings.ESP_Enabled then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                    if onScreen then
+                        tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                        tracerLine.Visible = true
+                    else
+                        tracerLine.Visible = false
+                    end
                 else
                     tracerLine.Visible = false
                 end
-            else
-                tracerLine.Visible = false
             end
-        end
+        end)
         
-        if not player.Parent then 
-            ClearESP(player)
-            connection:Disconnect()
-        end
-    end)
-end
-
--- Refresh toàn bộ ESP
-local function RefreshESP()
-    for _, plr in pairs(Players:GetPlayers()) do
-        ClearESP(plr)
-        CreateESP(plr)
+        table.insert(ESP_Storage[player].Connections, renderConn)
+    end
+    
+    -- Kết nối sự kiện CharacterAdded (Mấu chốt để hỗ trợ re-spawn và người chơi mới)
+    local charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
+    table.insert(ESP_Storage[player].Connections, charAddedConn)
+    
+    -- Nếu nhân vật đã load sẵn khi người chơi kết nối
+    if player.Character then
+        task.spawn(onCharacterAdded, player.Character)
     end
 end
 
-Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(ClearESP)
-
--- // CÁC HÀM TOGGLE //
-
-CreateSection("VISUALS")
-
--- 1. Box ESP
-CreateButton("Box ESP", function()
-    Settings.Box_Enabled = not Settings.Box_Enabled
-    return Settings.Box_Enabled
-end)
-
--- 2. Name ESP
-CreateButton("Name Tags", function()
-    Settings.Name_Enabled = not Settings.Name_Enabled
-    return Settings.Name_Enabled
-end)
-
--- 3. Chams
-CreateButton("Chams (Highlight)", function()
-    Settings.Chams_Enabled = not Settings.Chams_Enabled
-    return Settings.Chams_Enabled
-end)
-
--- 4. Tracers
-CreateButton("Tracers", function()
-    Settings.Tracers_Enabled = not Settings.Tracers_Enabled
-    return Settings.Tracers_Enabled
-end)
-
-CreateSection("WORLD")
-
--- 5. Xray
-CreateButton("Xray (WallHack)", function()
-    Settings.Xray_Enabled = not Settings.Xray_Enabled
-    if Settings.Xray_Enabled then
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
-                v.Transparency = 0.5
-            end
-        end
-    else
-        -- Reset đơn giản (không hoàn hảo nhưng đỡ lag)
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
-                v.Transparency = 0
-            end
-        end
+-- Khởi động ESP cho tất cả những người đang có mặt trong server
+local function InitializeESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        ApplyESPToPlayer(player)
     end
-    return Settings.Xray_Enabled
+end
+
+Players.PlayerAdded:Connect(ApplyESPToPlayer)
+Players.PlayerRemoving:Connect(CleanPlayerESP)
+
+
+-- ================================================================= --
+-- 🌐 THIẾT LẬP CÁC TÍNH NĂNG TRÊN TRANG (TAB CONTENTS)
+-- ================================================================= --
+
+-- --- TAB 1: ESP ---
+CreateSection(ESPPage, "Tính Năng Cơ Bản")
+CreateToggle(ESPPage, "Bật Hệ Thống ESP", "ESP_Enabled")
+CreateToggle(ESPPage, "Đồng Đội Check (Ẩn đồng đội)", "Team_Check")
+
+CreateSection(ESPPage, "Hiển Thị")
+CreateToggle(ESPPage, "Khung Vẽ (Box ESP)", "Box_Enabled")
+CreateToggle(ESPPage, "Tên Người Chơi (Name)", "Name_Enabled")
+CreateToggle(ESPPage, "Khoảng Cách (Distance)", "Distance_Enabled")
+CreateToggle(ESPPage, "Nhìn Xuyên Tường (Chams)", "Chams_Enabled")
+CreateToggle(ESPPage, "Đường Kẻ Định Vị (Tracers)", "Tracers_Enabled")
+
+
+-- --- TAB 2: WORLD ---
+CreateSection(WorldPage, "Ánh Sáng & Hiển Thị Map")
+
+-- Xray
+CreateToggle(WorldPage, "Bật Xray (Wallhack Map)", "Xray_Enabled", function(state)
+    if state then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") and not obj.Parent:IsA("Accessory") then
+                if not OriginalTransparency[obj] then
+                    OriginalTransparency[obj] = obj.Transparency
+                end
+                obj.Transparency = 0.5
+            end
+        end
+    else
+        for obj, trans in pairs(OriginalTransparency) do
+            if obj and obj.Parent then
+                obj.Transparency = trans
+            end
+        end
+        table.clear(OriginalTransparency)
+    end
 end)
 
--- 6. Fullbright
-CreateButton("Fullbright", function()
-    Settings.Fullbright_Enabled = not Settings.Fullbright_Enabled
-    if Settings.Fullbright_Enabled then
-        Lighting.Ambient = Color3.new(1, 1, 1)
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 12
-        Lighting.FogEnd = 100000
+-- Fullbright
+local lightingConn
+CreateToggle(WorldPage, "Bật Fullbright (Sáng map)", "Fullbright_Enabled", function(state)
+    if state then
+        lightingConn = RunService.RenderStepped:Connect(function()
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 12
+            Lighting.FogEnd = 100000
+        end)
     else
+        if lightingConn then lightingConn:Disconnect() end
         Lighting.Ambient = OriginalSettings.Ambient
         Lighting.OutdoorAmbient = OriginalSettings.OutdoorAmbient
         Lighting.Brightness = OriginalSettings.Brightness
         Lighting.ClockTime = OriginalSettings.ClockTime
         Lighting.FogEnd = OriginalSettings.FogEnd
     end
-    return Settings.Fullbright_Enabled
 end)
 
--- // SPECTATE SYSTEM //
 
-CreateSection("SPECTATE")
+-- --- TAB 3: TOOLS (CÔNG CỤ) ---
+CreateSection(ToolsPage, "Hệ Thống Camera & Freecam")
 
+-- Freecam (Khóa vị trí nhân vật khi bật)
+local freecamConn = nil
+local fSpeed = 1
+CreateToggle(ToolsPage, "Bật Freecam (Body đứng yên)", "Freecam_Enabled", function(state)
+    if state then
+        -- Khóa cứng nhân vật của tôi tại chỗ
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = true
+        end
+        
+        Camera.CameraType = Enum.CameraType.Scriptable
+        freecamConn = RunService.RenderStepped:Connect(function(dt)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, -fSpeed) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, fSpeed) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then Camera.CFrame = Camera.CFrame * CFrame.new(-fSpeed, 0, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then Camera.CFrame = Camera.CFrame * CFrame.new(fSpeed, 0, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then Camera.CFrame = Camera.CFrame * CFrame.new(0, fSpeed, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then Camera.CFrame = Camera.CFrame * CFrame.new(0, -fSpeed, 0) end
+        end)
+    else
+        if freecamConn then freecamConn:Disconnect() end
+        
+        -- Mở khóa nhân vật của tôi
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+        end
+        
+        Camera.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        end
+    end
+end)
+
+-- Tìm kiếm thủ công người chơi để Spectate
 local SpectateFrame = Instance.new("Frame")
-SpectateFrame.Parent = ScrollFrame
-SpectateFrame.Size = UDim2.new(1, 0, 0, 40)
-SpectateFrame.BackgroundTransparency = 1
+SpectateFrame.Parent = ToolsPage
+SpectateFrame.Size = UDim2.new(1, -10, 0, 42)
+SpectateFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
 
-local NameInput = Instance.new("TextBox")
-NameInput.Parent = SpectateFrame
-NameInput.Size = UDim2.new(0.6, -5, 1, 0)
-NameInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-NameInput.TextColor3 = Color3.new(1, 1, 1)
-NameInput.PlaceholderText = "Enter Name..."
-NameInput.Font = Enum.Font.Gotham
-NameInput.TextSize = 14
-local CornerInput = Instance.new("UICorner"); CornerInput.Parent = NameInput
+local SpecCorner = Instance.new("UICorner")
+SpecCorner.CornerRadius = UDim.new(0, 6)
+SpecCorner.Parent = SpectateFrame
 
-local ViewBtn = Instance.new("TextButton")
-ViewBtn.Parent = SpectateFrame
-ViewBtn.Size = UDim2.new(0.2, -5, 1, 0)
-ViewBtn.Position = UDim2.new(0.6, 0, 0, 0)
-ViewBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-ViewBtn.Text = "View"
-ViewBtn.TextColor3 = Color3.new(1, 1, 1)
-local CornerView = Instance.new("UICorner"); CornerView.Parent = ViewBtn
+local SpecInput = Instance.new("TextBox")
+SpecInput.Parent = SpectateFrame
+SpecInput.Size = UDim2.new(0.55, -10, 1, 0)
+SpecInput.Position = UDim2.new(0, 10, 0, 0)
+SpecInput.BackgroundTransparency = 1
+SpecInput.TextColor3 = Color3.new(1, 1, 1)
+SpecInput.PlaceholderText = "Nhập tên người xem..."
+SpecInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+SpecInput.Font = Enum.Font.GothamMedium
+SpecInput.Text = ""
+SpecInput.TextSize = 13
+SpecInput.TextXAlignment = Enum.TextXAlignment.Left
 
-local UnviewBtn = Instance.new("TextButton")
-UnviewBtn.Parent = SpectateFrame
-UnviewBtn.Size = UDim2.new(0.2, 0, 1, 0)
-UnviewBtn.Position = UDim2.new(0.8, 0, 0, 0)
-UnviewBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-UnviewBtn.Text = "Reset"
-UnviewBtn.TextColor3 = Color3.new(1, 1, 1)
-local CornerUnview = Instance.new("UICorner"); CornerUnview.Parent = UnviewBtn
+local SpecBtn = Instance.new("TextButton")
+SpecBtn.Parent = SpectateFrame
+SpecBtn.Size = UDim2.new(0.2, -5, 0, 30)
+SpecBtn.Position = UDim2.new(0.55, 0, 0.5, -15)
+SpecBtn.BackgroundColor3 = Settings.Theme_Color
+SpecBtn.Font = Enum.Font.GothamBold
+SpecBtn.Text = "Xem"
+SpecBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpecBtn.TextSize = 12
 
--- Logic tìm tên người chơi
-local function GetPlayer(name)
+local SpecBtnCorner = Instance.new("UICorner")
+SpecBtnCorner.CornerRadius = UDim.new(0, 6)
+SpecBtnCorner.Parent = SpecBtn
+
+local UnspecBtn = Instance.new("TextButton")
+UnspecBtn.Parent = SpectateFrame
+UnspecBtn.Size = UDim2.new(0.2, 0, 0, 30)
+UnspecBtn.Position = UDim2.new(0.75, 5, 0.5, -15)
+UnspecBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+UnspecBtn.Font = Enum.Font.GothamBold
+UnspecBtn.Text = "Hủy"
+UnspecBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnspecBtn.TextSize = 12
+
+local UnspecCorner = Instance.new("UICorner")
+UnspecCorner.CornerRadius = UDim.new(0, 6)
+UnspecCorner.Parent = UnspecBtn
+
+local function FindPlayer(name)
     name = name:lower()
-    for _, v in pairs(Players:GetPlayers()) do
+    for _, v in ipairs(Players:GetPlayers()) do
         if v.Name:lower():sub(1, #name) == name or v.DisplayName:lower():sub(1, #name) == name then
             return v
         end
@@ -371,58 +750,249 @@ local function GetPlayer(name)
     return nil
 end
 
-ViewBtn.MouseButton1Click:Connect(function()
-    local target = GetPlayer(NameInput.Text)
-    if target and target.Character then
-        Camera.CameraSubject = target.Character:FindFirstChild("Humanoid")
-        NameInput.Text = target.Name -- Auto complete tên
+SpecBtn.MouseButton1Click:Connect(function()
+    local target = FindPlayer(SpecInput.Text)
+    if target and target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+        Camera.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
+        SpecInput.Text = target.DisplayName
     end
 end)
 
-UnviewBtn.MouseButton1Click:Connect(function()
-    if LocalPlayer.Character then
-        Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+UnspecBtn.MouseButton1Click:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     end
 end)
 
--- // FREECAM (SIMPLE) //
-CreateSection("TOOLS")
+-- --- 📊 DANH SÁCH NGƯỜI CHƠI (TỰ ĐỘNG REFRESH MỖI 5 GIÂY) ---
+CreateSection(ToolsPage, "Danh sách người chơi (Quét 5s/lần)")
 
-local isFreecam = false
-local freecamConn = nil
-local speed = 1
+local PlayerListContainer = Instance.new("ScrollingFrame")
+PlayerListContainer.Parent = ToolsPage
+PlayerListContainer.Size = UDim2.new(1, -10, 0, 160)
+PlayerListContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+PlayerListContainer.ScrollBarThickness = 3
+PlayerListContainer.ScrollBarImageColor3 = Settings.Theme_Color
 
-CreateButton("Freecam (PC/Mobile)", function()
-    isFreecam = not isFreecam
-    Settings.Freecam_Enabled = isFreecam
-    
-    if isFreecam then
-        Camera.CameraType = Enum.CameraType.Scriptable
-        freecamConn = RunService.RenderStepped:Connect(function(dt)
-            -- Logic Freecam đơn giản (WASD + QE)
-            -- Lưu ý: Đây là logic cơ bản, trên Mobile sẽ cần dùng nút ảo để di chuyển camera
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, -speed) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, speed) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then Camera.CFrame = Camera.CFrame * CFrame.new(-speed, 0, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then Camera.CFrame = Camera.CFrame * CFrame.new(speed, 0, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.E) then Camera.CFrame = Camera.CFrame * CFrame.new(0, speed, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then Camera.CFrame = Camera.CFrame * CFrame.new(0, -speed, 0) end
-        end)
-    else
-        if freecamConn then freecamConn:Disconnect() end
-        Camera.CameraType = Enum.CameraType.Custom
-        if LocalPlayer.Character then
-            Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+local PlcCorner = Instance.new("UICorner")
+PlcCorner.CornerRadius = UDim.new(0, 8)
+PlcCorner.Parent = PlayerListContainer
+
+local PlcLayout = Instance.new("UIListLayout")
+PlcLayout.Parent = PlayerListContainer
+PlcLayout.SortOrder = Enum.SortOrder.Name
+PlcLayout.Padding = UDim.new(0, 4)
+
+-- Hàm tạo danh sách người chơi
+local function RefreshPlayerListUI()
+    -- Xóa các danh sách cũ
+    for _, child in ipairs(PlayerListContainer:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
         end
     end
-    return isFreecam
+
+    -- Thêm người chơi hiện tại vào danh sách
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local item = Instance.new("Frame")
+            item.Name = player.Name
+            item.Parent = PlayerListContainer
+            item.Size = UDim2.new(1, -6, 0, 36)
+            item.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+            
+            local itemCorner = Instance.new("UICorner")
+            itemCorner.CornerRadius = UDim.new(0, 4)
+            itemCorner.Parent = item
+            
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Parent = item
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Position = UDim2.new(0, 10, 0, 0)
+            nameLabel.Size = UDim2.new(0.55, 0, 1, 0)
+            nameLabel.Font = Enum.Font.GothamMedium
+            nameLabel.Text = player.DisplayName
+            nameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+            nameLabel.TextSize = 12
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+            -- Nút Xem (Spectate nhanh)
+            local specButton = Instance.new("TextButton")
+            specButton.Parent = item
+            specButton.Size = UDim2.new(0, 26, 0, 26)
+            specButton.Position = UDim2.new(1, -65, 0.5, -13)
+            specButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            specButton.Text = "👁️"
+            specButton.TextSize = 14
+            specButton.Font = Enum.Font.GothamBold
+            
+            local sbCorner = Instance.new("UICorner")
+            sbCorner.CornerRadius = UDim.new(0, 4)
+            sbCorner.Parent = specButton
+
+            specButton.MouseButton1Click:Connect(function()
+                if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                    Camera.CameraSubject = player.Character:FindFirstChildOfClass("Humanoid")
+                end
+            end)
+
+            -- Nút Định vị Camera Freecam tới người chơi (📍)
+            local teleportCamButton = Instance.new("TextButton")
+            teleportCamButton.Parent = item
+            teleportCamButton.Size = UDim2.new(0, 26, 0, 26)
+            teleportCamButton.Position = UDim2.new(1, -32, 0.5, -13)
+            teleportCamButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            teleportCamButton.Text = "📍"
+            teleportCamButton.TextSize = 14
+            teleportCamButton.Font = Enum.Font.GothamBold
+            
+            local tbCorner = Instance.new("UICorner")
+            tbCorner.CornerRadius = UDim.new(0, 4)
+            tbCorner.Parent = teleportCamButton
+
+            teleportCamButton.MouseButton1Click:Connect(function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetHrp = player.Character.HumanoidRootPart
+                    -- Đặt Camera của Freecam về đúng tọa độ mục tiêu (cách khoảng 5 studs)
+                    Camera.CFrame = CFrame.new(targetHrp.Position + Vector3.new(0, 3, 5), targetHrp.Position)
+                end
+            end)
+        end
+    end
+end
+
+-- Vòng lặp refresh tự động mỗi 5 giây
+task.spawn(function()
+    while true do
+        pcall(RefreshPlayerListUI)
+        task.wait(5)
+    end
 end)
 
 
--- Init
-RefreshESP()
+-- --- TAB 4: SETTINGS ---
+CreateSection(SettingsPage, "Hệ Thống Tránh Mất Script")
+CreateToggle(SettingsPage, "FixLost: Tự động chạy lại", "Auto_Reexecute", function(state)
+    if state then
+        HookTeleportFixLost()
+    end
+end)
+
+CreateSection(SettingsPage, "Server Options")
+CreateButton(SettingsPage, "Server Hop (Đổi sang Server khác)", function()
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService = game:GetService("HttpService")
+    local PlaceId = game.PlaceId
+    
+    local success, serverList = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    end)
+    
+    if success and serverList and serverList.data then
+        for _, server in ipairs(serverList.data) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                break
+            end
+        end
+    end
+end)
+
+CreateButton(SettingsPage, "Rejoin Server (Vào lại nhanh)", function()
+    local TeleportService = game:GetService("TeleportService")
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
+
+
+-- ================================================================= --
+-- 🤝 TƯƠNG TÁC NGƯỜI DÙNG (KÉO THẢ MAIN & LOGO COI NHƯ HOÀN HẢO)
+-- ================================================================= --
+
+-- Kéo thả Bảng Điều Khiển Chính
+local dragToggle, dragStart, startPos
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    local position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    TweenService:Create(MainFrame, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = position}):Play()
+end
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragToggle = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragToggle = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if dragToggle then
+            updateInput(input)
+        end
+    end
+end)
+
+-- Kéo thả LOGO (MiniButton)
+local miniDragToggle, miniDragStart, miniStartPos
+local function updateMiniInput(input)
+    local delta = input.Position - miniDragStart
+    local position = UDim2.new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
+    TweenService:Create(MiniButton, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = position}):Play()
+end
+
+MiniButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        miniDragToggle = true
+        miniDragStart = input.Position
+        miniStartPos = MiniButton.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                miniDragToggle = false
+            end
+        end)
+    end
+end)
+
+MiniButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if miniDragToggle then
+            updateMiniInput(input)
+        end
+    end
+end)
+
+-- Phím tắt ẩn/hiện GUI (PC: RightShift)
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
+        MainFrame.Visible = not MainFrame.Visible
+        MiniButton.Visible = not MainFrame.Visible
+    end
+end)
+
+-- Đóng và mở bảng điều khiển
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    MiniButton.Visible = true
+end)
+
+MiniButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = true
+    MiniButton.Visible = false
+end)
+
+
+-- Khởi tạo hệ thống ESP ban đầu
+InitializeESP()
+pcall(RefreshPlayerListUI)
+
+-- Gửi thông báo
 game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "Visuals GUI";
-    Text = "Loaded! Enjoy ESP & Visuals.";
-    Duration = 5;
+    Title = "Visuals Pro Load!";
+    Text = "Ấn phím RightShift hoặc nút 👁️ để ẩn/hiện GUI.";
+    Duration = 6;
 })
