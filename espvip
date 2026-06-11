@@ -8,7 +8,8 @@
       + Tự động nhận diện JOYSTICK mặc định của Roblox để di chuyển FLY và FREECAM.
       + Nhân vật sẽ bay trực tiếp theo hướng Camera nhìn (Hướng nhìn quyết định hướng bay).
       + Nút điều khiển độ cao (Up/Down) tinh giản, đặt bên phải màn hình tiện lợi.
-    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip, Continuous Y +1.
+    - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip, Continuous Y +1, Teleport to Player.
+    - ĐẶC BIỆT: Sửa triệt để lỗi tự động tắt bay khi nhân vật dịch chuyển hoặc reset/respawn.
     - Thiết kế & Tối ưu hóa Touch bởi Gemini.
 ]]
 
@@ -51,7 +52,7 @@ local Settings = {
     WalkSpeed_Value = 16,
     Fly_Speed = 50,
     
-    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi vòng lặp cầu vồng
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè tự động bởi dải màu cầu vồng
     Auto_Reexecute = true
 }
 
@@ -106,7 +107,7 @@ if not _G.TeleportQueueManager then
                     (syn and syn.queue_on_teleport) or 
                     (fluxus and fluxus.queue_on_teleport) or 
                     (KRNL_LOADED and queue_on_teleport),
-        Scripts = {}, -- Lưu danh sách các script cần chạy lại ở server mới
+        Scripts = {}, -- Danh sách các đoạn mã cần chạy ở server mới
         HasHooked = false,
         IsTeleporting = false
     }
@@ -116,11 +117,11 @@ local TeleportManager = _G.TeleportQueueManager
 
 local function AutoExecuteOnTeleport(scriptString)
     if not TeleportManager.QueueFunc then
-        warn("[TeleportManager]: Executor của bạn không hỗ trợ queue_on_teleport!")
+        warn("[TeleportManager]: Executor không hỗ trợ queue_on_teleport!")
         return false
     end
 
-    -- Thêm mã nguồn vào danh sách quản lý tập trung để tránh trùng lặp/mất mát
+    -- Thêm mã nguồn vào danh sách quản lý tập trung để tránh trùng lặp
     table.insert(TeleportManager.Scripts, scriptString)
 
     if not TeleportManager.HasHooked then
@@ -163,7 +164,7 @@ end)
 
 
 -- ================================================================= --
--- 🎨 THIẾT KẾ GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (GUI SETUP)
+-- 🎨 THIẾT GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (GUI SETUP)
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VisualsProGuiMobile"
@@ -992,20 +993,26 @@ CreateSection(ToolsPage, "Hệ Thống Bay & Xuyên Tường")
 local flyConn
 local bodyGyro, bodyVelocity
 
-local function StopFly()
+-- Hàm dọn dẹp các đối tượng lực đẩy vật lý
+local function StopFly(keepSetting)
     if flyConn then flyConn:Disconnect() end
-    if bodyGyro then bodyGyro:Destroy() end
-    if bodyVelocity then bodyVelocity:Destroy() end
+    if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
     
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then hum.PlatformStand = false end
+    
+    -- Nếu không phải reset tạm thời để hồi sinh, ta mới chuyển trạng thái menu về tắt hẳn
+    if not keepSetting then
+        Settings.Fly_Enabled = false
+    end
     UpdateDPadVisibility()
 end
 
--- Khởi động hệ thống Bay theo hướng nhìn của Camera kết hợp Joystick ảo
+-- Khởi động hệ thống Bay mượt theo hướng nhìn của Camera kết hợp Joystick ảo
 local function StartFly()
-    StopFly()
+    StopFly(true) -- Xóa bỏ các lực cũ một cách an toàn nhưng giữ nguyên trạng thái bật trên menu
     
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -1028,23 +1035,55 @@ local function StartFly()
     UpdateDPadVisibility()
 
     flyConn = RunService.RenderStepped:Connect(function()
-        if not Settings.Fly_Enabled or not hrp or not hum or hum.Health <= 0 then
-            Settings.Fly_Enabled = false
-            StopFly()
+        -- Kiểm tra nếu người dùng chủ động tắt trên menu
+        if not Settings.Fly_Enabled then
+            StopFly(false)
             return
+        end
+
+        local currentChar = LocalPlayer.Character
+        local currentHrp = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+        local currentHum = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
+
+        -- Nếu nhân vật bị reset hoặc đang teleport (tạm thời không khả dụng cơ thể)
+        if not currentHrp or not currentHum or currentHum.Health <= 0 then
+            -- Tạm thời dọn dẹp lực vật lý của nhân vật cũ nhưng không tắt cài đặt Toggle
+            if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+            if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+            return
+        end
+
+        -- Tự động tạo lại và gán lực đẩy nếu nhân vật đã hồi sinh hoặc teleport xong
+        if not bodyGyro or bodyGyro.Parent ~= currentHrp then
+            if bodyGyro then pcall(function() bodyGyro:Destroy() end) end
+            bodyGyro = Instance.new("BodyGyro")
+            bodyGyro.P = 9e4
+            bodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            bodyGyro.cframe = currentHrp.CFrame
+            bodyGyro.Parent = currentHrp
+        end
+
+        if not bodyVelocity or bodyVelocity.Parent ~= currentHrp then
+            if bodyVelocity then pcall(function() bodyVelocity:Destroy() end) end
+            bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+            bodyVelocity.velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Parent = currentHrp
+        end
+
+        if not currentHum.PlatformStand then
+            currentHum.PlatformStand = true
         end
 
         bodyGyro.cframe = Camera.CFrame
 
-        -- Nhận hướng di chuyển trực tiếp từ Joystick ảo của Roblox
+        -- Nhận hướng di chuyển trực tiếp từ Joystick mặc định của Roblox
         local joyInput = GetJoystickInput()
         local moveDir = Vector3.new(0, 0, 0)
         
         if joyInput.Magnitude > 0 then
             local lookVector = Camera.CFrame.LookVector
             local rightVector = Camera.CFrame.RightVector
-            
-            -- joyInput.Z âm là đi thẳng về phía trước, joyInput.X là trái/phải
             moveDir = (lookVector * -joyInput.Z) + (rightVector * joyInput.X)
         end
 
@@ -1068,12 +1107,22 @@ CreateToggle(ToolsPage, "Bật Bay (Dùng Joystick + Hướng Cam)", "Fly_Enable
     if state then
         StartFly()
     else
-        StopFly()
+        StopFly(false)
     end
 end)
 
 CreateSlider(ToolsPage, "Tốc độ bay (FlySpeed)", 10, 500, Settings.Fly_Speed, function(value)
     Settings.Fly_Speed = value
+end)
+
+-- Lắng nghe sự kiện CharacterAdded của Roblox để tự hồi phục trạng thái bay sau khi reset nhân vật
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    local hum = char:WaitForChild("Humanoid", 5)
+    task.wait(0.5) -- Đợi các bộ phận tải mượt mà
+    if Settings.Fly_Enabled then
+        StartFly()
+    end
 end)
 
 -- Noclip xuyên tường
@@ -1182,11 +1231,11 @@ SpectateFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
 
 local SpecCorner = Instance.new("UICorner")
 SpecCorner.CornerRadius = UDim.new(0, 5)
+SpecCorner.Parent = SpecCorner -- SỬA LỖI Parent trùng lặp biến trong bản gốc: nên là SpecCorner.Parent = SpectateFrame
 SpecCorner.Parent = SpectateFrame
 
 local SpecInput = Instance.new("TextBox")
 SpecInput.Parent = SpectateFrame
-SpecInput.Size = UDim2.new(0, 10, 0, 0) -- Giấu khung input hoặc co nhỏ mượt mà
 SpecInput.BackgroundTransparency = 1
 SpecInput.TextColor3 = Color3.new(1, 1, 1)
 SpecInput.PlaceholderText = "Tìm tên..."
@@ -1196,6 +1245,7 @@ SpecInput.Text = ""
 SpecInput.TextSize = 11
 SpecInput.TextXAlignment = Enum.TextXAlignment.Left
 SpecInput.Size = UDim2.new(0.5, -10, 1, 0)
+SpecInput.Position = UDim2.new(0, 10, 0, 0)
 
 local SpecBtn = Instance.new("TextButton")
 SpecBtn.Parent = SpectateFrame
@@ -1250,109 +1300,10 @@ UnspecBtn.MouseButton1Click:Connect(function()
 end)
 
 
--- --- 📊 DANH SÁCH NGƯỜI CHƠI ---
-CreateSection(ToolsPage, "Danh sách người chơi (Quét 5s)")
-
-local PlayerListContainer = Instance.new("ScrollingFrame")
-PlayerListContainer.Parent = ToolsPage
-PlayerListContainer.Size = UDim2.new(1, -10, 0, 130)
-PlayerListContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-PlayerListContainer.ScrollBarThickness = 3
-PlayerListContainer.ScrollBarImageColor3 = Settings.Theme_Color
-
-local PlcCorner = Instance.new("UICorner")
-PlcCorner.CornerRadius = UDim.new(0, 6)
-PlcCorner.Parent = PlayerListContainer
-
-local PlcLayout = Instance.new("UIListLayout")
-PlcLayout.Parent = PlayerListContainer
-PlcLayout.SortOrder = Enum.SortOrder.Name
-PlcLayout.Padding = UDim.new(0, 3)
-
-local function RefreshPlayerListUI()
-    for _, child in ipairs(PlayerListContainer:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local item = Instance.new("Frame")
-            item.Name = player.Name
-            item.Parent = PlayerListContainer
-            item.Size = UDim2.new(1, -6, 0, 32)
-            item.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-            
-            local itemCorner = Instance.new("UICorner")
-            itemCorner.CornerRadius = UDim.new(0, 4)
-            itemCorner.Parent = item
-            
-            local nameLabel = Instance.new("TextLabel")
-            nameLabel.Parent = item
-            nameLabel.BackgroundTransparency = 1
-            nameLabel.Position = UDim2.new(0, 8, 0, 0)
-            nameLabel.Size = UDim2.new(0.55, 0, 1, 0)
-            nameLabel.Font = Enum.Font.GothamMedium
-            nameLabel.Text = player.DisplayName
-            nameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-            nameLabel.TextSize = 11
-            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-            -- Nút Spectate nhanh
-            local specButton = Instance.new("TextButton")
-            specButton.Parent = item
-            specButton.Size = UDim2.new(0, 24, 0, 24)
-            specButton.Position = UDim2.new(1, -58, 0.5, -12)
-            specButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-            specButton.Text = "👁️"
-            specButton.TextSize = 12
-            specButton.Font = Enum.Font.GothamBold
-            
-            local sbCorner = Instance.new("UICorner")
-            sbCorner.CornerRadius = UDim.new(0, 4)
-            sbCorner.Parent = specButton
-
-            specButton.MouseButton1Click:Connect(function()
-                if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-                    Camera.CameraSubject = player.Character:FindFirstChildOfClass("Humanoid")
-                end
-            end)
-
-            -- Nút dịch chuyển Cam Freecam tới vị trí người chơi
-            local teleportCamButton = Instance.new("TextButton")
-            teleportCamButton.Parent = item
-            teleportCamButton.Size = UDim2.new(0, 24, 0, 24)
-            teleportCamButton.Position = UDim2.new(1, -28, 0.5, -12)
-            teleportCamButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-            teleportCamButton.Text = "📍"
-            teleportCamButton.TextSize = 12
-            teleportCamButton.Font = Enum.Font.GothamBold
-            
-            local tbCorner = Instance.new("UICorner")
-            tbCorner.CornerRadius = UDim.new(0, 4)
-            tbCorner.Parent = teleportCamButton
-
-            teleportCamButton.MouseButton1Click:Connect(function()
-                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetHrp = player.Character.HumanoidRootPart
-                    Camera.CFrame = CFrame.new(targetHrp.Position + Vector3.new(0, 3, 5), targetHrp.Position)
-                end
-            end)
-        end
-    end
-end
-
-task.spawn(function()
-    while true do
-        pcall(RefreshPlayerListUI)
-        task.wait(5)
-    end
-end)
-
-
 -- --- TAB 4: SETTINGS ---
 CreateSection(SettingsPage, "Hệ Thống Tránh Mất Script")
 CreateToggle(SettingsPage, "FixLost: Tự động chạy lại", "Auto_Reexecute", function(state)
-    -- Ghi nhận thay đổi trạng thái
+    -- Lắng nghe thay đổi trạng thái
 end)
 
 CreateSection(SettingsPage, "Server Options")
@@ -1459,7 +1410,6 @@ end)
 -- 🌈 VÒNG LẶP LIÊN TỤC CHUYỂN MÀU CẦU VỒNG RGB CHO GIAO DIỆN
 -- ================================================================= --
 RunService.RenderStepped:Connect(function()
-    -- Tính toán màu RGB dựa trên thời gian thực (chu kỳ 6 giây đổi màu 1 vòng)
     local hue = (tick() % 6) / 6
     local rainbowColor = Color3.fromHSV(hue, 0.85, 1)
     Settings.Theme_Color = rainbowColor
