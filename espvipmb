@@ -1,12 +1,13 @@
 --[[
     ===================================================================
-    📱 VISUALS & ESP PRO - MOBILE EXCLUSIVE EDITION (WITH VIRTUAL D-PAD) 📱
+    📱 VISUALS & ESP PRO - MOBILE EXCLUSIVE EDITION (WITH JOYSTICK & RGB) 📱
     ===================================================================
-    - Giao diện: Tối ưu kích thước cho màn hình cảm ứng điện thoại, bo góc hiện đại.
+    - Giao diện: Tối ưu kích thước cảm ứng điện thoại, hỗ trợ CHUYỂN MÀU CẦU VỒNG (RGB).
     - Kéo thả: Hỗ trợ vuốt chạm kéo thả bảng điều khiển và nút LOGO cực nhạy.
-    - Hệ thống di chuyển di động:
-      + Khi bật FLY hoặc FREECAM, tự động hiện D-Pad ảo (Nút cảm ứng trên màn hình).
-      + Người chơi di động không cần bàn phím vẫn bay và thám thính dễ dàng.
+    - Hệ thống di chuyển di động cải tiến:
+      + Tự động nhận diện JOYSTICK mặc định của Roblox để di chuyển FLY và FREECAM.
+      + Nhân vật sẽ bay trực tiếp theo hướng Camera nhìn (Hướng nhìn quyết định hướng bay).
+      + Nút điều khiển độ cao (Up/Down) tinh giản, đặt bên phải màn hình tiện lợi.
     - Tính năng: ESP Box, Name, Distance, Chams, Tracers, Team Check, Xray Pro, Fullbright, Spectate, Freecam Mobile, Fly Mobile, Noclip.
     - Thiết kế & Tối ưu hóa Touch bởi Gemini.
 ]]
@@ -49,7 +50,7 @@ local Settings = {
     WalkSpeed_Value = 16,
     Fly_Speed = 50,
     
-    Theme_Color = Color3.fromRGB(0, 180, 255), -- Màu chủ đạo (Cyan Neon)
+    Theme_Color = Color3.fromRGB(0, 180, 255), -- Sẽ bị ghi đè bởi vòng lặp cầu vồng RGB
     Auto_Reexecute = true
 }
 
@@ -63,15 +64,37 @@ local OriginalSettings = {
     FogEnd = Lighting.FogEnd
 }
 
--- Trạng thái nút ảo D-pad di động
+-- Trạng thái nút nâng hạ độ cao di động
 local TouchStates = {
-    Forward = false,
-    Backward = false,
-    Left = false,
-    Right = false,
     Up = false,
     Down = false
 }
+
+-- Hệ thống đăng ký các thành phần giao diện đổi màu cầu vồng (RGB Rainbow List)
+local RainbowElements = {}
+local function RegisterRainbow(instance, property)
+    table.insert(RainbowElements, {Instance = instance, Property = property})
+end
+
+-- ================================================================= --
+-- 🔄 CƠ CHẾ JOYSTICK MẶC ĐỊNH CHO MOBILE
+-- ================================================================= --
+local PlayerModule, Controls
+pcall(function()
+    PlayerModule = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+    Controls = PlayerModule:GetControls()
+end)
+
+local function GetJoystickInput()
+    local moveVector = Vector3.new(0, 0, 0)
+    if Controls and Controls.GetMoveVector then
+        pcall(function()
+            moveVector = Controls:GetMoveVector()
+        end)
+    end
+    return moveVector -- X = Trái/Phải, Z = Tiến/Lùi (Z âm là tiến lên)
+end
+
 
 -- ================================================================= --
 -- 🔄 CƠ CHẾ FIXLOST (AUTO-REEXECUTE ON TELEPORT)
@@ -146,6 +169,7 @@ local function ShowJoinNotification(player)
     toastStroke.Thickness = 1
     toastStroke.Transparency = 1
     toastStroke.Parent = toast
+    RegisterRainbow(toastStroke, "Color")
 
     local iconLabel = Instance.new("TextLabel")
     iconLabel.Size = UDim2.new(0, 25, 1, 0)
@@ -191,7 +215,7 @@ local function ShowJoinNotification(player)
     end)
 end
 
--- Nút Thu Nhỏ (Floating Toggle Button - LOGO - MOBILE LUÔN HIỆN BAN ĐẦU ĐỂ TRÁNH MẤT)
+-- Nút Thu Nhỏ (LOGO KÉO THẢ ĐƯỢC - KHÔNG LO BỊ MẤT)
 local MiniButton = Instance.new("TextButton")
 MiniButton.Name = "MiniButton"
 MiniButton.Parent = ScreenGui
@@ -202,7 +226,7 @@ MiniButton.Text = "👁️"
 MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 MiniButton.TextSize = 22
 MiniButton.Font = Enum.Font.GothamBold
-MiniButton.Visible = true -- Mobile luôn bật sẵn nút con mắt để dễ bật tắt
+MiniButton.Visible = true 
 
 local MiniCorner = Instance.new("UICorner")
 MiniCorner.CornerRadius = UDim.new(0.5, 0)
@@ -212,16 +236,17 @@ local MiniStroke = Instance.new("UIStroke")
 MiniStroke.Color = Settings.Theme_Color
 MiniStroke.Thickness = 2
 MiniStroke.Parent = MiniButton
+RegisterRainbow(MiniStroke, "Color")
 
--- Khung Giao Diện Chính (Thiết kế thon gọn hơn cho Mobile)
+-- Khung Giao Diện Chính
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.Position = UDim2.new(0.5, -220, 0.5, -150)
-MainFrame.Size = UDim2.new(0, 440, 0, 300) -- Nhỏ hơn bản PC để tránh tràn màn hình điện thoại
+MainFrame.Size = UDim2.new(0, 440, 0, 300) 
 MainFrame.Active = true
-MainFrame.Visible = false -- Khởi động ẩn bảng chính, người dùng bấm nút mắt 👁️ để hiện
+MainFrame.Visible = false 
 
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 8)
@@ -231,6 +256,7 @@ local MainStroke = Instance.new("UIStroke")
 MainStroke.Color = Color3.fromRGB(40, 40, 45)
 MainStroke.Thickness = 1
 MainStroke.Parent = MainFrame
+RegisterRainbow(MainStroke, "Color")
 
 -- Thanh Tiêu Đề
 local TitleBar = Instance.new("Frame")
@@ -363,26 +389,26 @@ CreateTab("Tools", "🛠️")
 CreateTab("Settings", "⚙️")
 
 Pages["ESP"].Visible = true
-TabButtons["ESP"].BackgroundColor3 = Settings.Theme_Color
 TabButtons["ESP"].TextColor3 = Color3.fromRGB(255, 255, 255)
 
 
 -- ================================================================= --
--- 📱 HỆ THỐNG NÚT ẢO D-PAD ĐIỀU KHIỂN CHO MOBILE (TOUCH CONTROLS)
+-- 📱 NÚT NÂNG HẠ ĐỘ CAO DI ĐỘNG (UP & DOWN CONTROLS)
 -- ================================================================= --
+-- Chỉ chứa nút Lên/Xuống để người dùng điều khiển độ cao bên tay phải
 local DPadFrame = Instance.new("Frame")
 DPadFrame.Name = "DPadFrame"
 DPadFrame.Parent = ScreenGui
-DPadFrame.Size = UDim2.new(0, 160, 0, 160)
-DPadFrame.Position = UDim2.new(0.75, -80, 0.6, -80)
+DPadFrame.Size = UDim2.new(0, 70, 0, 140)
+DPadFrame.Position = UDim2.new(0.85, -35, 0.5, -70)
 DPadFrame.BackgroundTransparency = 1
-DPadFrame.Visible = false -- Chỉ hiện khi bật Fly hoặc Freecam
+DPadFrame.Visible = false 
 
-local function CreateDPadButton(name, text, size, pos)
+local function CreateDPadButton(name, text, pos)
     local btn = Instance.new("TextButton")
     btn.Name = name
     btn.Parent = DPadFrame
-    btn.Size = size
+    btn.Size = UDim2.new(0, 50, 0, 50)
     btn.Position = pos
     btn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
     btn.BackgroundTransparency = 0.3
@@ -392,15 +418,15 @@ local function CreateDPadButton(name, text, size, pos)
     btn.TextSize = 16
     
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
+    corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = btn
     
     local stroke = Instance.new("UIStroke")
     stroke.Color = Settings.Theme_Color
     stroke.Thickness = 1.5
     stroke.Parent = btn
+    RegisterRainbow(stroke, "Color")
 
-    -- Lắng nghe cảm ứng nhấn giữ và thả
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             TouchStates[name] = true
@@ -418,16 +444,10 @@ local function CreateDPadButton(name, text, size, pos)
     return btn
 end
 
--- Tạo sơ đồ nút D-Pad ảo
-local btnSize = UDim2.new(0, 42, 0, 42)
-CreateDPadButton("Forward", "▲", btnSize, UDim2.new(0.5, -21, 0, 0))
-CreateDPadButton("Left", "◀", btnSize, UDim2.new(0, 10, 0.5, -21))
-CreateDPadButton("Right", "▶", btnSize, UDim2.new(1, -52, 0.5, -21))
-CreateDPadButton("Backward", "▼", btnSize, UDim2.new(0.5, -21, 1, -42))
-CreateDPadButton("Up", "▲+", btnSize, UDim2.new(0, 10, 0, 0))
-CreateDPadButton("Down", "▼-", btnSize, UDim2.new(1, -52, 1, -42))
+-- Tạo nút lên/xuống ở góc phải màn hình
+CreateDPadButton("Up", "▲+", UDim2.new(0.5, -25, 0, 10))
+CreateDPadButton("Down", "▼-", UDim2.new(0.5, -25, 1, -60))
 
--- Cập nhật ẩn/hiện D-Pad ảo một cách thông minh
 local function UpdateDPadVisibility()
     if Settings.Fly_Enabled or Settings.Freecam_Enabled then
         DPadFrame.Visible = true
@@ -545,6 +565,7 @@ local function CreateSlider(parentPage, text, min, max, default, callback)
     sliderFill.Parent = sliderBar
     sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
     sliderFill.BackgroundColor3 = Settings.Theme_Color
+    RegisterRainbow(sliderFill, "BackgroundColor3")
     
     local sfCorner2 = Instance.new("UICorner")
     sfCorner2.CornerRadius = UDim.new(1, 0)
@@ -554,7 +575,7 @@ local function CreateSlider(parentPage, text, min, max, default, callback)
     sliderKnob.Parent = sliderBar
     sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
     sliderKnob.Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0)
-    sliderKnob.Size = UDim2.new(0, 14, 0, 14) -- Khuyên dùng Knob lớn hơn trên điện thoại để dễ chạm
+    sliderKnob.Size = UDim2.new(0, 14, 0, 14) 
     sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     
     local skCorner = Instance.new("UICorner")
@@ -626,6 +647,7 @@ local function CreateSection(parentPage, text)
     label.Font = Enum.Font.GothamBold
     label.TextSize = 10
     label.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterRainbow(label, "TextColor3")
 end
 
 
@@ -723,7 +745,7 @@ local function ApplyESPToPlayer(player)
         innerStroke.Parent = boxFrame
         objects.Box = boxBillboard
 
-        -- 4. Tracers (Vẽ bằng Drawing API nếu executor di động hỗ trợ)
+        -- 4. Tracers 
         local tracerLine
         if Drawing then
             tracerLine = Drawing.new("Line")
@@ -942,7 +964,7 @@ local function StopFly()
     UpdateDPadVisibility()
 end
 
--- logic Fly bằng nút ảo trên Mobile
+-- Khởi động hệ thống Bay theo hướng nhìn của Camera kết hợp Joystick ảo
 local function StartFly()
     StopFly()
     
@@ -975,20 +997,19 @@ local function StartFly()
 
         bodyGyro.cframe = Camera.CFrame
 
-        -- Nhận hướng di chuyển từ phím ảo Mobile
+        -- Nhận hướng di chuyển trực tiếp từ Joystick ảo của Roblox
+        local joyInput = GetJoystickInput()
         local moveDir = Vector3.new(0, 0, 0)
-        if TouchStates.Forward then
-            moveDir = moveDir + Camera.CFrame.LookVector
+        
+        if joyInput.Magnitude > 0 then
+            local lookVector = Camera.CFrame.LookVector
+            local rightVector = Camera.CFrame.RightVector
+            
+            -- joyInput.Z âm là đi thẳng về phía trước, joyInput.X là trái/phải
+            moveDir = (lookVector * -joyInput.Z) + (rightVector * joyInput.X)
         end
-        if TouchStates.Backward then
-            moveDir = moveDir - Camera.CFrame.LookVector
-        end
-        if TouchStates.Left then
-            moveDir = moveDir - Camera.CFrame.RightVector
-        end
-        if TouchStates.Right then
-            moveDir = moveDir + Camera.CFrame.RightVector
-        end
+
+        -- Điều khiển bay nâng cao/hạ thấp bằng 2 phím ảo bên phải
         if TouchStates.Up then
             moveDir = moveDir + Vector3.new(0, 1, 0)
         end
@@ -1004,7 +1025,7 @@ local function StartFly()
     end)
 end
 
-CreateToggle(ToolsPage, "Bật Bay (Sử dụng phím ảo D-Pad)", "Fly_Enabled", function(state)
+CreateToggle(ToolsPage, "Bật Bay (Dùng Joystick + Hướng Cam)", "Fly_Enabled", function(state)
     if state then
         StartFly()
     else
@@ -1060,12 +1081,16 @@ CreateToggle(ToolsPage, "Bật Freecam (Body đứng yên)", "Freecam_Enabled", 
                 return
             end
 
-            -- Nhận hướng di chuyển Camera từ nút ảo
+            -- Nhận hướng di chuyển từ Joystick ảo
+            local joyInput = GetJoystickInput()
             local moveDir = Vector3.new(0, 0, 0)
-            if TouchStates.Forward then moveDir = moveDir + Camera.CFrame.LookVector end
-            if TouchStates.Backward then moveDir = moveDir - Camera.CFrame.LookVector end
-            if TouchStates.Left then moveDir = moveDir - Camera.CFrame.RightVector end
-            if TouchStates.Right then moveDir = moveDir + Camera.CFrame.RightVector end
+            
+            if joyInput.Magnitude > 0 then
+                local lookVector = Camera.CFrame.LookVector
+                local rightVector = Camera.CFrame.RightVector
+                moveDir = (lookVector * -joyInput.Z) + (rightVector * joyInput.X)
+            end
+
             if TouchStates.Up then moveDir = moveDir + Vector3.new(0, 1, 0) end
             if TouchStates.Down then moveDir = moveDir - Vector3.new(0, 1, 0) end
 
@@ -1364,9 +1389,38 @@ CloseBtn.MouseButton1Click:Connect(function()
 end)
 
 MiniButton.MouseButton1Click:Connect(function()
-    -- Mở bảng khi nhấn nhẹ vào nút con mắt
     MainFrame.Visible = true
     MiniButton.Visible = false
+end)
+
+
+-- ================================================================= --
+-- 🌈 VÒNG LẶP LIÊN TỤC CHUYỂN MÀU CẦU VỒNG RGB CHO GIAO DIỆN
+-- ================================================================= --
+RunService.RenderStepped:Connect(function()
+    -- Tính toán màu RGB dựa trên thời gian thực (chu kỳ 6 giây đổi màu 1 vòng)
+    local hue = (tick() % 6) / 6
+    local rainbowColor = Color3.fromHSV(hue, 0.85, 1)
+    Settings.Theme_Color = rainbowColor
+    
+    -- Cập nhật đồng bộ các Tab đang mở
+    for name, btn in pairs(TabButtons) do
+        if Pages[name].Visible then
+            btn.BackgroundColor3 = rainbowColor
+        end
+    end
+    
+    -- Cập nhật tất cả các viền/chữ có đăng ký RGB hoạt động
+    for i = #RainbowElements, 1, -1 do
+        local item = RainbowElements[i]
+        if item.Instance and item.Instance.Parent then
+            pcall(function()
+                item.Instance[item.Property] = rainbowColor
+            end)
+        else
+            table.remove(RainbowElements, i) -- Tự dọn dẹp nếu đối tượng bị hủy
+        end
+    end
 end)
 
 
@@ -1376,7 +1430,7 @@ pcall(RefreshPlayerListUI)
 
 -- Thông báo thành công
 game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "Visuals Mobile Load!";
+    Title = "Visuals Mobile RGB!";
     Text = "Nhấn nút 👁️ ở góc màn hình để bắt đầu gian lận!";
     Duration = 5;
 })
